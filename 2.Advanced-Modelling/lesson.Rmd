@@ -1,0 +1,244 @@
+---
+title: 'Investment strategies'
+date: '`r Sys.Date()`'
+output:
+  word_document:
+    toc: yes
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# knitr::opts_chunk$set(fig.align = 'center', echo = TRUE, message = FALSE)
+```
+
+```{r libraries, include = FALSE}
+# In case you have not already installed these packages, uncomment the following
+# four lines before running the code chunk.
+# install.packages("readr")
+# install.packages("dplyr")
+# install.packages("ggplot2")
+# install.packages("knitr")
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(knitr)
+# setwd("./2.Advanced-Modelling")
+getwd()
+```
+
+```{r data, include=FALSE}
+# To import the files, first set the working directory to the location where the data_1.csv and data_2.csv files are located on your computer. Then run the code chunck.
+data_1 <- read_csv("data_1.csv")
+data_2 <- read_csv("data_2.csv")
+data_2$date_disclosed <- as.Date(data_2$date_disclosed, format = "%d.%m.%y")
+```
+
+## Data exploration
+
+### Data_1: Investment annual summary
+
+This data set includes information on the investment volumes (in dollars) made in each region of the world, between 2012 and 2018.
+
+Using inline code: This `data_1` object includes information on the investment volumes (in dollars) made in each region.
+
+```{r summary_1}
+# Print a summary of data_1
+summary(data_1)
+```
+
+### Data_2: Investment services provided
+
+`data_2` provides **detailed** _information_ on the individual investments ~~paid~~ made. For more formatting tips check: [R Markdown cookbook](https://bookdown.org/yihui/rmarkdown-cookbook/). Information listed in `data_2` includes the date, country, country code, project name, project number, company name, sector, project status, investment amounts, etc.
+
+```{r summary_2}
+summary(data_2)
+```
+
+In addition to links, we can also add supporting images to the report.
+
+```{r include_graphic, out.width = '70%'}
+# First make sure to set the working directory to where the image is located
+# and then run the following code, adjusting the name of the image file and the extension.
+# knitr::include_graphics("Investments.png")
+```
+
+### Data analysis
+
+Let's make some simple analysis of some of the data. Specifically, let's filter the data in `data_2` so to keep only the rows referring to investments in Indonesia.
+
+```{r data_2_Indonesia}
+data_2_Indonesia <- data_2 %>%
+  filter(country == "Indonesia")
+data_2_Indonesia
+```
+
+Let's further filter for only investments that have happened in a specific period (year = 2012).
+
+```{r data_2_Indonesia_2012}
+data_2_Indonesia_2012 <- data_2 %>%
+  filter(
+    country == "Indonesia",
+    date_disclosed >= "2011-01-01",
+    date_disclosed <= "2012-12-31"
+  )
+data_2_Indonesia_2012
+```
+
+We can also include code results in the text of the report. Let's first calculate some results.
+
+```{r data_2_Indonesia_2012_sum}
+data_2_Indonesia_2012_sum <- data_2_Indonesia_2012 %>%
+  summarise(sum_total = sum(total_ifc_investment_as_approved_by_board_million_usd,
+    na.rm = TRUE
+  ))
+```
+
+Thus, the total amount of investments in Indonesia in 2012 is `r data_2_Indonesia_2012_sum`. The letter r before the obje
+
+## Data visualization
+
+Next, we visualize some of the data.
+
+```{r line_chart}
+ggplot(
+  data_1,
+  aes(
+    x = fiscal_year,
+    y = dollars_in_millions,
+    color = region
+  )
+) +
+  geom_line() +
+  labs(
+    title = "Investment Summary",
+    x = "Year",
+    y = "Investments in million $"
+  )
+```
+
+### Plot options
+
+Sometimes, we might want to modify the figure dimensions. We can do this by setting the fig.width and fig.height options in the code chunck.
+
+```{r line_chart_options1, fig.width=5, fig.height=5}
+ggplot(
+  data_1,
+  aes(
+    x = fiscal_year,
+    y = dollars_in_millions,
+    color = region
+  )
+) +
+  geom_line() +
+  labs(
+    title = "Investment Summary",
+    x = "Year",
+    y = "Investments in million $"
+  )
+```
+
+```{r line_chart_options2, out.width = '50%'}
+ggplot(
+  data_1,
+  aes(
+    x = fiscal_year,
+    y = dollars_in_millions,
+    color = region
+  )
+) +
+  geom_line() +
+  labs(
+    title = "Investment Summary",
+    x = "Year",
+    y = "Investments in million $"
+  )
+```
+
+```{r line_chart_options3, fig.align= 'left'}
+ggplot(
+  data_1,
+  aes(
+    x = fiscal_year,
+    y = dollars_in_millions,
+    color = region
+  )
+) +
+  geom_line() +
+  labs(
+    title = "Investment Summary",
+    x = "Year",
+    y = "Investments in million $"
+  )
+```
+
+```{r line_chart_options4, fig.align ='center'}
+ggplot(
+  data_1,
+  aes(
+    x = fiscal_year,
+    y = dollars_in_millions,
+    color = region
+  )
+) +
+  geom_line() +
+  labs(
+    title = "Investment Summary",
+    x = "Year",
+    y = "Investments in million $"
+  )
+```
+
+## Organization of the report
+
+You can add more structure to your report by including billeted items.
+
+- Report
+  - Report 1
+  - Report 2
+  - Report 3
+
+We can also add a table using kable()
+
+```{r table1}
+table1 <- table(data_2$country)
+kable(table1)
+```
+
+We can also select which columns from a specific object, we would like printed.
+
+```{r table2}
+kable(data_2_Indonesia_2012[c(4, 5, 13)])
+```
+
+We can also directly change the column names within the kable() function.
+
+```{r table3}
+kable(data_2_Indonesia_2012[c(4, 5, 13)],
+  col.names = c("Sector", "Project name", "Total investment")
+)
+```
+
+Within the function itself, we can also change the alignment of the text/numbers in the respective columns and we can add a table title.
+
+```{r table4}
+kable(data_2_Indonesia_2012[c(4, 5, 13)],
+  col.names = c("Sector", "Project name", "Total investment"),
+  align = "ccc"
+)
+```
+
+```{r table5}
+kable(data_2_Indonesia_2012[c(4, 5, 13)],
+  col.names = c("Sector", "Project name", "Total investment"),
+  align = "ccc",
+  caption = "Total investment per project in Indonesia in 2012"
+)
+```
+
+```{r}
+sessionInfo()
+```
