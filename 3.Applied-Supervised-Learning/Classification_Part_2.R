@@ -16,21 +16,22 @@
 
 # We start by installing the necessary libraries. Make sure to uncomment and run
 # only the libraries which you haven't installed already.
-# install.packages("DescTools")
-# install.packages("xgboost")
-# install.packages("caret")
-# install.packages("dplyr")
-# install.packages("tidyverse")
-# install.packages("mltools")
-# install.packages("reshape2")
-# install.packages("data.table")
-# install.packages("pracma")
-# install.packages("PRROC")
-# install.packages("e1071")
-# install.packages("dlookr")
-# install.packages("pROC")
-# install.packages("ROCR")
-# install.packages("nnet")
+install.packages("DescTools")
+install.packages("xgboost")
+install.packages("caret")
+install.packages("dplyr")
+install.packages("tidyverse")
+install.packages("mltools")
+install.packages("reshape2")
+install.packages("data.table")
+install.packages("pracma")
+install.packages("PRROC")
+install.packages("e1071")
+install.packages("dlookr")
+install.packages("pROC")
+install.packages("ROCR")
+install.packages("nnet")
+install.packages("rsample")
 
 # Next, we call the required libraries.
 library(DescTools)
@@ -54,7 +55,7 @@ library(nnet)
 # Load dataset: We will be working with the same dataset as in Week 4.
 # Set working directory to the folder that contains the "Employee-Attrition_cleaned.csv" file.
 setwd("~/Library/CloudStorage/OneDrive-SharedLibraries-BernerFachhochschule/bfh-bfhinternal - General/SBD3/Week 5")
-hr_data <- read_csv("Employee-Attrition_cleaned.csv")
+hr_data <- read_csv("./3.Applied-Supervised-Learning/Employee-Attrition_cleaned.csv")
 data <- hr_data # We make a copy from the original dataset and work on the copy
 
 

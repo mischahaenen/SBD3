@@ -194,6 +194,8 @@ mean(data.test$pred_RF == data.test$Attrition)
 # Plot variable importance
 varImpPlot(RF_model)
 
+Yes
+
 
 
 
