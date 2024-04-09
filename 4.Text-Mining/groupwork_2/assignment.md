@@ -1,3 +1,5 @@
+# Groupwork 2: Text Mining
+
 We are the communication department of Berner Fachhochschuleand manage various channels of which Twitter is one. Next to our own activities on this social media platform, we are interested in finding out how other Universities of Applied Sciencesuse Twitter. Any insights are of value, because such can help us to further improve our communication strategy on Twitter and beyond.
 
 1. How many tweets are being posted by the various Universities when? Are there any “release“ strategies visible?
@@ -12,7 +14,26 @@ File: Tweets_all.rda
 Variables: ID & Id_str(of the tweet as integer and as string), full_text, in_reply_to_screen_name, retweet_count(how often a tweet was re-posted by Jan/23), favorite_count(how often a tweet was liked by Jan/23), lang (language of the tweet), university (which univ. of applied science created the tweet), Various forms the tweet‘s timestamp (e.g. created_at, tweet_date, tweet_month, tweet_minute).
 Further hints: How to deal with re-tweets, automated tweets & chatbots and emojis?
 
-Robins Plan:
+## Data Structure
+
+Unnamed: 0: An index or identifier for each tweet. It's an integer value.
+created_at: The timestamp when the tweet was created, in the format "YYYY-MM-DD HH:MM:SS".
+id: The numeric ID of the tweet, in floating-point format.
+id_str: The string representation of the tweet's ID.
+full_text: The full text of the tweet.
+in_reply_to_screen_name: The screen name of the user to whom the tweet was a reply, if any. Most of these values are missing (NaN), indicating that most tweets are not replies.
+retweet_count: The number of times the tweet has been retweeted.
+favorite_count: The number of times the tweet has been liked (favorited).
+lang: The language code of the tweet, e.g., "de" for German.
+university: Appears to be an identifier or name of the university associated with the tweet.
+tweet_date: The date the tweet was posted, in "YYYY-MM-DD" format.
+tweet_minute: The timestamp rounded to the nearest minute, in "YYYY-MM-DD HH:MM" format.
+tweet_hour: The timestamp rounded to the nearest hour, in "YYYY-MM-DD HH:00" format.
+tweet_month: The first day of the month in which the tweet was posted, in "YYYY-MM-DD" format, where the day is always "01".
+timeofday_hour: The hour of the day (0-23) when the tweet was posted.
+
+## Group Plan:
+
 Step 1: Project Initialization & Team Alignment
 
 1. Initial Meeting and Role Distribution (1 hour)
