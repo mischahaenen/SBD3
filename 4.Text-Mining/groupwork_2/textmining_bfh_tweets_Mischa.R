@@ -6,110 +6,57 @@ load("Tweets_all.rda")
 head(tweets)
 summary(tweets)
 
+# -------------------------------------------------------------------
+# Question 1: How many tweets are being posted by the various Universities when? Are there any 'release' strategies visible?
+# -------------------------------------------------------------------
+
 # use packages
-library(dplyr)
-library(ggplot2)
+library(tidyverse)
 library(lubridate)
 
-# 1. How many tweets are being posted by the various Universities when? Are there any 'release' strategies visible?
-
-# Preprocessing Step (if needed)
+# Preprocessing Step
 tweets$university <- as.character(tweets$university)
+tweets$created_at <- as.POSIXct(tweets$created_at, format = "%Y-%m-%d %H:%M:%S")
+tweets$date <- as.Date(tweets$created_at)
+tweets$year <- year(tweets$created_at)
 
-# Aggregate tweets by university and hour
-tweets_by_hour <- tweets %>%
-    group_by(university, tweet_hour) %>%
-    summarise(count = n())
+# Analyze tweet frequency by university, year, and day
+tweet_frequency <- tweets %>%
+    group_by(university, year, date) %>%
+    summarise(daily_tweets = n(), .groups = "drop")
 
-# Visualize tweet frequency by hour
-ggplot(tweets_by_hour, aes(x = tweet_hour, y = count, color = university)) +
-    geom_line() +
-    theme_minimal() +
-    labs(title = "Tweet Frequency by Hour", x = "Hour", y = "Tweet Count")
+# Split the analysis for each year for a detailed view
+plot_list <- list()
+years <- unique(tweet_frequency$year)
 
-# Additional aggregations for exploration
-tweets_by_day <- tweets %>%
-    mutate(weekday = weekdays(as.Date(tweet_date))) %>%
-    group_by(university, weekday) %>%
-    summarise(count = n())
+for (yr in years) {
+    yearly_data <- filter(tweet_frequency, year == yr)
+    p <- ggplot(yearly_data, aes(x = date, y = daily_tweets, color = university)) +
+        geom_line() +
+        labs(
+            title = paste("Daily Tweet Frequency in", yr),
+            x = "Date",
+            y = "Number of Tweets"
+        ) +
+        theme_minimal() +
+        theme(legend.position = "bottom")
 
-tweets$tweet_year <- year(tweets$tweet_date)
+    plot_list[[as.character(yr)]] <- p
+}
 
-tweets_by_year <- tweets %>%
-    group_by(university, tweets$tweet_year) %>%
-    summarize(count = n())
-
-ggplot(tweets_by_hour, aes(x = tweet_hour, y = count, color = university)) +
-    geom_line() +
-    facet_wrap(~ tweets$tweet_year) + # Split visualization by year
-    theme_minimal() +
-    labs(title = "Tweet Frequency by Hour (Split by Year)", x = "Hour", y = "Tweet Count")
-
-ggplot(tweets_by_day, aes(x = weekday, y = count, color = university)) +
-    geom_bar(stat = "identity", position = position_dodge()) +
-    facet_wrap(~ tweets$tweet_year) + # Split visualization by year
-    theme_minimal() +
-    labs(title = "Tweet Frequency by Day of Week (Split by Year)", x = "Weekday", y = "Tweet Count")
-
-
-# 2. What are the tweets about and how do other Twitter users react to them (likes, etc.)?
-
-# Load necessary libraries
-library(tidyverse)
-library(tidytext)
-library(wordcloud)
-library(lubridate) # For working with dates and time
-
-# Load the dataset
-load("./Groupwork_Textmining/Tweets_all.rda")
+#
+print(plot_list[["2022"]])
 
 # -------------------------------------------------------------------
 # Question 2: Content and Reaction Analysis
 # -------------------------------------------------------------------
 
-# Top words per university
-tweets %>%
-    unnest_tokens(word, full_text) %>%
-    anti_join(stop_words) %>%
-    count(university, word, sort = TRUE)
 
-# Word clouds per university
-generate_wordcloud <- function(data) {
-    wordcloud(data$word, data$freq, max.words = 100, random.order = FALSE, colors = brewer.pal(8, "Set2"))
-}
-
-tweets %>%
-    unnest_tokens(word, full_text) %>%
-    anti_join(stop_words) %>%
-    group_by(university) %>%
-    nest() %>%
-    mutate(wordcloud = map(data, generate_wordcloud))
-
-# Hashtag analysis (if hashtags are present)
-tweets %>%
-    filter(str_detect(full_text, "#")) %>%
-    mutate(hashtags = str_extract_all(full_text, "#\\w+")) %>%
-    unnest(hashtags) %>%
-    count(university, hashtags, sort = TRUE)
-
-# Engagement analysis
-engagement_summary <- tweets %>%
-    group_by(university) %>%
-    summarize(
-        avg_likes = mean(favorite_count),
-        avg_retweets = mean(retweet_count),
-        total_tweets = n()
-    )
-
-# Time-based engagement analysis
-tweets %>%
-    group_by(university, timeofday_hour) %>%
-    summarize(
-        avg_likes = mean(favorite_count),
-        avg_retweets = mean(retweet_count)
-    )
+# -------------------------------------------------------------------
+# Question 3: How do the university tweets differ in terms of content, style, emotions, etc?
+# -------------------------------------------------------------------
 
 
-# 3. How do the university tweets differ in terms of content, style, emotions, etc?
-
-# 4. What specific advice can you give us as communication department of BFH based on your analysis? How can we integrate the analysis of tweets in our internal processes, can you think of any data products that would be of value for us?
+# -------------------------------------------------------------------
+# Question 4: What specific advice can you give us as communication department of BFH based on your analysis? How can we integrate the analysis of tweets in our internal processes, can you think of any data products that would be of value for us?
+# -------------------------------------------------------------------
