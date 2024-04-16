@@ -1,11 +1,3 @@
-# should be folder SBD3 othwerwise change path with setwd()
-getwd()
-setwd("./4.Text-Mining/groupwork_2/")
-load("Tweets_all.rda")
-# check that tweets are loaded
-head(tweets)
-summary(tweets)
-
 # -------------------------------------------------------------------
 # Question 1: How many tweets are being posted by the various Universities when? Are there any 'release' strategies visible?
 # -------------------------------------------------------------------
@@ -14,38 +6,58 @@ summary(tweets)
 library(tidyverse)
 library(lubridate)
 
+# should be folder SBD3 othwerwise change path with setwd()
+getwd()
+setwd("./4.Text-Mining/groupwork_2/")
+load("Tweets_all.rda")
+
+# check that tweets are loaded
+head(tweets)
+summary(tweets)
+
 # Preprocessing Step
-tweets$university <- as.character(tweets$university)
 tweets$created_at <- as.POSIXct(tweets$created_at, format = "%Y-%m-%d %H:%M:%S")
 tweets$date <- as.Date(tweets$created_at)
 tweets$year <- year(tweets$created_at)
+tweets$university <- as.character(tweets$university)
 
-# Analyze tweet frequency by university, year, and day
-tweet_frequency <- tweets %>%
+# Calculate time intervals in days between tweets
+tweets <- tweets %>%
+    arrange(university, year, date, created_at) %>%
     group_by(university, year, date) %>%
-    summarise(daily_tweets = n(), .groups = "drop")
+    mutate(time_interval = as.numeric(difftime(created_at, lag(created_at), units = "hours")))
 
-# Split the analysis for each year for a detailed view
-plot_list <- list()
-years <- unique(tweet_frequency$year)
+# View time intervals
+tweets$time_interval
 
-for (yr in years) {
-    yearly_data <- filter(tweet_frequency, year == yr)
-    p <- ggplot(yearly_data, aes(x = date, y = daily_tweets, color = university)) +
-        geom_line() +
-        labs(
-            title = paste("Daily Tweet Frequency in", yr),
-            x = "Date",
-            y = "Number of Tweets"
-        ) +
-        theme_minimal() +
-        theme(legend.position = "bottom")
+ggplot(tweets, aes(x = tweet_hour, y = university)) +
+    geom_line()
 
-    plot_list[[as.character(yr)]] <- p
-}
+# Plotting the data
+# Plotting the data
+tweets %>%
+    filter(!is.na(time_interval)) %>%
+    ggplot(aes(x = time_interval)) +
+    geom_histogram(binwidth = 1, fill = "blue", color = "black") + # Binwidth of 1 hour
+    facet_wrap(~ university + year, scales = "free_y") +
+    labs(
+        title = "Tweet Time Intervals by University and Year",
+        x = "Time Interval (hours)",
+        y = "Frequency"
+    ) +
+    theme_minimal()
 
-#
-print(plot_list[["2022"]])
+# Calculate interval summary statistics
+interval_summary <- tweets %>%
+    group_by(university, year) %>%
+    summarise(
+        average_interval = if (all(is.na(time_interval))) NA_real_ else mean(time_interval, na.rm = TRUE),
+        median_interval = if (all(is.na(time_interval))) NA_real_ else median(time_interval, na.rm = TRUE),
+        min_interval = if (all(is.na(time_interval))) NA_real_ else min(time_interval, na.rm = TRUE),
+        max_interval = if (all(is.na(time_interval))) NA_real_ else max(time_interval, na.rm = TRUE),
+        sd_interval = if (all(is.na(time_interval))) NA_real_ else sd(time_interval, na.rm = TRUE)
+    )
+
 
 # -------------------------------------------------------------------
 # Question 2: Content and Reaction Analysis

@@ -34,7 +34,6 @@ library(nnet)
 library(xgboost)
 library(neuralnet)
 
-
 # Load dataset: We will be working with the same dataset as in Week 4.
 # Set working directory to the folder that contains the "barcelona_listings_cleaned.csv" file.
 setwd("~/Library/CloudStorage/OneDrive-SharedLibraries-BernerFachhochschule/bfh-bfhinternal - General/SBD3/Week 5")
