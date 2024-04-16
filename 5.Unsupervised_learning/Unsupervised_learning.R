@@ -15,12 +15,12 @@
 # install.packages("ggplot2")
 # install.packages("dplyr")
 # install.packages("cluster")
-# install.packages("factoextra")
-# install.packages("mlbench")
+install.packages("factoextra")
+install.packages("mlbench")
 # install.packages("tidyr")
 # install.packages("readr")
 # install.packages("FactoMineR")
-# install.packages("dbscan")
+install.packages("dbscan")
 
 # Load necessary packages
 library(ggplot2)
@@ -35,7 +35,8 @@ library(dbscan)
 
 # Load data
 setwd("~/Library/CloudStorage/OneDrive-SharedLibraries-BernerFachhochschule/bfh-bfhinternal - General/SBD3/Week 9")
-Mall_Customers <- read_csv("Mall_Customers.csv")
+getwd()
+Mall_Customers <- read_csv("../5.Unsupervised_learning/Mall_Customers.csv")
 data <- Mall_Customers
 
 # Data exploration
