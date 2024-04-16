@@ -36,7 +36,8 @@ library(neuralnet)
 
 # Load dataset: We will be working with the same dataset as in Week 4.
 # Set working directory to the folder that contains the "barcelona_listings_cleaned.csv" file.
-setwd("~/Library/CloudStorage/OneDrive-SharedLibraries-BernerFachhochschule/bfh-bfhinternal - General/SBD3/Week 5")
+setwd("../../3.Applied-Supervised-Learning/")
+getwd()
 airbnb <- read_csv("barcelona_listings_cleaned.csv")
 data <- airbnb # We make a copy from the original dataset and work on the copy
 
@@ -275,7 +276,7 @@ r_squared_nn <- cor(predictions_nn, test$price)^2
 cat("RMSE of the tuned NN model:", rmse_nn, "\n")
 cat("R-squared of the tuned NN model:", r_squared_nn, "\n")
 
-
+mean(test$price)
 # Let's compare the performance across all different models.
 # Comparison for the RMSE values
 cat("RMSE of the XGBoost:", rmse_xgb, "\n")

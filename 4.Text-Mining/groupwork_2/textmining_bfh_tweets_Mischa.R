@@ -8,7 +8,7 @@ library(lubridate)
 
 # should be folder SBD3 othwerwise change path with setwd()
 getwd()
-setwd("./4.Text-Mining/groupwork_2/")
+setwd("../4.Text-Mining/groupwork_2/")
 load("Tweets_all.rda")
 
 # check that tweets are loaded
