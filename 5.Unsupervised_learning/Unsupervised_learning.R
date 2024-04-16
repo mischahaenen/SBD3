@@ -34,9 +34,8 @@ library(FactoMineR)
 library(dbscan)
 
 # Load data
-setwd("~/Library/CloudStorage/OneDrive-SharedLibraries-BernerFachhochschule/bfh-bfhinternal - General/SBD3/Week 9")
 getwd()
-Mall_Customers <- read_csv("../5.Unsupervised_learning/Mall_Customers.csv")
+Mall_Customers <- read_csv("/Mall_Customers.csv")
 data <- Mall_Customers
 
 # Data exploration
