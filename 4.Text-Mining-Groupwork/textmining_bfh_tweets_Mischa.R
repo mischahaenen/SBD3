@@ -1,62 +1,86 @@
 # -------------------------------------------------------------------
-# Question 1: How many tweets are being posted by the various Universities when? Are there any 'release' strategies visible?
+# Question 1: How many tweets are being posted by the various Universities when? Are there any 'release' strategies visible? Explain me and show in R how I can generate diagrams and R do explain the interval of the postings.
 # -------------------------------------------------------------------
 
-# use packages
+# Use packages
 library(tidyverse)
 library(lubridate)
 
-# should be folder SBD3 othwerwise change path with setwd()
-getwd()
+# Set working directory
 setwd("../data/")
+
+# Load data
 load("Tweets_all.rda")
 
-# check that tweets are loaded
+# Check that tweets are loaded
 head(tweets)
 summary(tweets)
 
-# Preprocessing Step
+# Preprocessing Step: Convert date and time to POSIXct and format according to date, year and university
 tweets$created_at <- as.POSIXct(tweets$created_at, format = "%Y-%m-%d %H:%M:%S")
 tweets$date <- as.Date(tweets$created_at)
 tweets$year <- year(tweets$created_at)
 tweets$university <- as.character(tweets$university)
 
-# Calculate time intervals in days between tweets
+# Count each tweet by university and hour of the day
+tweet_counts_by_hour_of_day <- tweets %>%
+    group_by(university, timeofday_hour) %>%
+    count() %>%
+    arrange(university, timeofday_hour)
+
+# Plot the number of tweets by university and hour of the day
+ggplot(tweet_counts_by_hour_of_day, aes(x = timeofday_hour, y = n, color = university)) +
+    geom_point() +
+    facet_wrap(~university) +
+    labs(title = "Number of tweets by university and hour", x = "Hour of day", y = "Number of tweets")
+
+# Show most active hours for each university
+hours_with_most_tweets_by_uni <- tweet_counts_by_hour_of_day %>%
+    group_by(university, timeofday_hour) %>%
+    summarize(total_tweets = sum(n)) %>%
+    group_by(university) %>%
+    slice_max(n = 1, order_by = total_tweets)
+
+print(hours_with_most_tweets_by_uni)
+
+# Show most active hour overall
+hour_with_most_tweets <- tweet_counts_by_hour_of_day %>%
+    group_by(timeofday_hour) %>%
+    summarize(total_tweets = sum(n)) %>%
+    arrange(desc(total_tweets)) %>%
+    slice(1)
+
+print(hour_with_most_tweets)
+
+# Calculate time intervals between tweets
 tweets <- tweets %>%
-    arrange(university, year, date, created_at) %>%
-    group_by(university, year, date) %>%
+    arrange(university, created_at) %>% # Arrange by university and timestamp
+    group_by(university) %>% # Group by university
     mutate(time_interval = as.numeric(difftime(created_at, lag(created_at), units = "hours")))
 
-# View time intervals
-tweets$time_interval
+# Descriptive statistics of time intervals
+summary(tweets$time_interval)
 
-ggplot(tweets, aes(x = tweet_hour, y = university)) +
-    geom_line()
+unique_universities <- tweets$university %>% unique()
 
-# Plotting the data
-# Plotting the data
-tweets %>%
-    filter(!is.na(time_interval)) %>%
-    ggplot(aes(x = time_interval)) +
-    geom_histogram(binwidth = 1, fill = "blue", color = "black") + # Binwidth of 1 hour
-    facet_wrap(~ university + year, scales = "free_y") +
-    labs(
-        title = "Tweet Time Intervals by University and Year",
-        x = "Time Interval (hours)",
-        y = "Frequency"
-    ) +
-    theme_minimal()
+for (uni in unique_universities) {
+    # Filter data for the specific university
+    filtered_data <- tweets %>%
+        filter(university == uni)
 
-# Calculate interval summary statistics
-interval_summary <- tweets %>%
-    group_by(university, year) %>%
-    summarise(
-        average_interval = if (all(is.na(time_interval))) NA_real_ else mean(time_interval, na.rm = TRUE),
-        median_interval = if (all(is.na(time_interval))) NA_real_ else median(time_interval, na.rm = TRUE),
-        min_interval = if (all(is.na(time_interval))) NA_real_ else min(time_interval, na.rm = TRUE),
-        max_interval = if (all(is.na(time_interval))) NA_real_ else max(time_interval, na.rm = TRUE),
-        sd_interval = if (all(is.na(time_interval))) NA_real_ else sd(time_interval, na.rm = TRUE)
-    )
+    # Create the plot
+    ggplot(filtered_data, aes(x = time_interval)) +
+        geom_histogram(fill = "lightblue") +
+        labs(title = "Distribution of time intervals between tweets", x = "Time interval (hours)")
+
+    # Save the plot (optional)
+    # ggsave(filename = paste0(uni, "_tweet_plot.png"))
+}
+
+# Visualize distribution of time intervals
+
+
+
 
 
 # -------------------------------------------------------------------
