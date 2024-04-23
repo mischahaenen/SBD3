@@ -35,7 +35,7 @@ library(dbscan)
 
 # Load data
 getwd()
-Mall_Customers <- read_csv("/Mall_Customers.csv")
+Mall_Customers <- read_csv("../data/Mall_Customers.csv")
 data <- Mall_Customers
 
 # Data exploration
