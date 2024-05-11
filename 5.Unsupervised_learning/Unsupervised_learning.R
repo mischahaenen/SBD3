@@ -15,12 +15,12 @@
 # install.packages("ggplot2")
 # install.packages("dplyr")
 # install.packages("cluster")
-install.packages("factoextra")
-install.packages("mlbench")
+# install.packages("factoextra")
+# install.packages("mlbench")
 # install.packages("tidyr")
 # install.packages("readr")
 # install.packages("FactoMineR")
-install.packages("dbscan")
+# install.packages("dbscan")
 
 # Load necessary packages
 library(ggplot2)
@@ -34,8 +34,8 @@ library(FactoMineR)
 library(dbscan)
 
 # Load data
-getwd()
-Mall_Customers <- read_csv("../data/Mall_Customers.csv")
+setwd("~/Library/CloudStorage/OneDrive-SharedLibraries-BernerFachhochschule/bfh-bfhinternal - General/SBD3/Week 9")
+Mall_Customers <- read_csv("Mall_Customers.csv")
 data <- Mall_Customers
 
 # Data exploration
@@ -199,9 +199,11 @@ dist_matrix <- dist(scaled_data)
 
 # Run hierarchical clustering with single linkage
 hc_single <- hclust(dist_matrix, method = "single")
+groups_single <- cutree(hc_single, k = 4)
 
 # Run hierarchical clustering with complete linkage
 hc_complete <- hclust(dist_matrix, method = "complete")
+groups_complete <- cutree(hc_complete, k = 4)
 
 # Let's plot
 # Single
@@ -221,6 +223,71 @@ plot(hc_complete,
 
 # Add color to the branches
 rect.hclust(hc_complete, k = 4, border = "red")
+
+
+# ------------------ DBScan --------------------- #
+# Run DBScan clustering on the previous mall customers (scaled) data  with a
+# default value for the eps = 0.5
+dbscan_fit <- dbscan(scaled_data, eps = 0.5, minPts = 5)
+
+# Plot the results using 2 of the original variables
+df_dbscan <- data.frame(x = scaled_data, cluster = dbscan_fit$cluster)
+ggplot(df_dbscan, aes(x = df_dbscan[, 1], y = df_dbscan[, 2], color = factor(cluster))) +
+    geom_point(size = 2) +
+    ggtitle("DBSCAN Clustering Results") +
+    xlab("Age") +
+    ylab("Annual Income")
+
+# Plot the results using the principle components
+df_dbscan_pc <- data.frame(x = pc1, y = pc2, cluster = dbscan_fit$cluster)
+ggplot(df_dbscan_pc, aes(x = x, y = y, color = factor(cluster))) +
+    geom_point(size = 2) +
+    ggtitle("DBSCAN Clustering Results") +
+    xlab("PC1") +
+    ylab("PC2")
+
+
+#------------ How to compare ---------------------#
+# The different clustering methods operate on different principles,
+# so the question becomes how to compare?
+
+# Calculating the silhouette coefficient is a common way to evaluate
+# the quality of clustering achieved by different algorithms. It measures
+# how similar an object is to its own cluster compared to other clusters.
+# This width is a value between -1 and 1, where:
+# * A value close to +1 indicates that the point is well matched to its own cluster and poorly matched to neighboring clusters.
+# * A value of 0 indicates that the point is on or very close to the decision boundary between two neighboring clusters.
+# * A value close to -1 indicates that the point might have been placed in the wrong cluster.
+
+# Let's calculate for the different clusters.
+# As a reminder, we calculated the dist_matrix before
+# dist_matrix <- dist(scaled_data)
+
+# and we are using all the clustering models trained before.
+
+# Calculate the silhouette coef for the k-means model
+silhouette_output_k_means <- silhouette(kmeans_model$cluster, dist_matrix)
+avg_silhouette_k_means <- mean(silhouette_output_k_means[, "sil_width"])
+
+# Calculate the silhouette coef for the hc_complete model
+silhouette_output_hc_complete <- silhouette(groups_complete, dist_matrix)
+avg_silhouette_hc_complete <- mean(silhouette_output_hc_complete[, "sil_width"])
+
+# Calculate the silhouette coef for the hc_single model
+silhouette_output_hc_single <- silhouette(groups_single, dist_matrix)
+avg_silhouette_hc_single <- mean(silhouette_output_hc_single[, "sil_width"])
+
+# Calculate the silhouette coef for the dbscan
+clustered <- dbscan_fit$cluster != 0
+silhouette_output_dbscan <- silhouette(dbscan_fit$cluster[clustered], dist(scaled_data[clustered, ]))
+avg_silhouette_dbscan <- mean(silhouette_output_dbscan[, "sil_width"])
+
+
+# Compare
+avg_silhouette_k_means
+avg_silhouette_hc_complete
+avg_silhouette_hc_single
+avg_silhouette_dbscan
 
 
 #----------------- Mixed Data --------------------#
