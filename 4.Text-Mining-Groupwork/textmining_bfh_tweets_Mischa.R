@@ -160,9 +160,6 @@ for (curr_year in unique_years) {
   }
 }
 
-
-
-
 # -------------------------------------------------------------------
 # Question 2: Content and Reaction Analysis
 # -------------------------------------------------------------------
@@ -175,19 +172,19 @@ for (curr_year in unique_years) {
 library(tidyverse)
 library(textclean)
 library(lubridate)
-library(wordcloud2)
+library(wordcloud)
 library(sentimentr)
 library(lexicon)
 library(topicmodels)
 library(tidytext)
-library(tidyverse)
 library(quanteda)
 library(stopwords)
 library(topicmodels)
 library(tidytext)
+library(syuzhet)
 
 getwd()
-setwd("../../data/")
+setwd("./data/")
 load("Tweets_all.rda")
 
 # Removes: URLS, Emojis, Punctuation, Numbers
@@ -198,19 +195,30 @@ tokens <- tokens(tweets$full_text,
   remove_url = TRUE,
   remove_separators = TRUE
 )
-# TODO: Add
-extended_stopwords <- c()
-# remove stopwords
+
+# TODO: Optimize stopwords
+extended_stopwords <- c(
+  "#fhnw", "#bfh", "@htw_chur", "#hslu", "#supsi"
+)
+
+# remove stopwords im multiple languages and remove university hashtags
+# TODO: change with quanteda::dfm and quanteda::tokens()
 tokens <- tokens_select(tokens,
-  pattern = c(stopwords("english"), extended_stopwords), selection = "remove"
+  pattern = c(
+    stopwords("english"),
+    stopwords("french"),
+    stopwords("german"),
+    stopwords("italian"),
+    extended_stopwords
+  ), selection = "remove"
 )
 
 # transform to lowercase
 tokens <- tokens_tolower(tokens)
 # Stem all words
 tokens <- tokens_wordstem(tokens)
-# Create n-grams of any length
-tokens <- tokens_ngrams(tokens, n = 1:2)
+# Create n-grams of any length (including bigrams and trigrams)
+tokens <- tokens_ngrams(tokens, n = 1:3)
 # Create Document-feature-matrix
 doc_matrix <- dfm(tokens)
 
@@ -225,151 +233,260 @@ word_freqs <- doc_matrix %>%
 # Top 20 words
 head(word_freqs, 20)
 
-# Wordcloud
-wordcloud2(doc_matrix, size = 0.6)
+word_freqs_df <- data.frame(
+  word = featnames(doc_matrix),
+  freq = colSums(doc_matrix)
+)
 
+# Create the word cloud
+set.seed(1234)
+wordcloud(
+  words = word_freqs_df$word,
+  freq = word_freqs_df$freq,
+  min.freq = 5,
+  max.words = 100,
+  random.order = FALSE,
+  rot.per = 0.35,
+  colors = brewer.pal(8, "Dark2")
+)
 
-# N-grams wirh "design"
-ngrams_with_design <- grep("design", names(word_freqs), value = TRUE)
-word_freqs[ngrams_with_design]
+for (uni in unique(tweets$university)) {
+  uni_tokens <- tokens(tweets$full_text,
+    remove_punct = TRUE,
+    remove_symbols = TRUE,
+    remove_numbers = TRUE,
+    remove_url = TRUE,
+    remove_separators = TRUE
+  )
+  uni_tokens <- tokens_select(uni_tokens,
+    pattern = c(
+      stopwords("english"),
+      stopwords("french"),
+      stopwords("german"),
+      stopwords("italian"),
+      extended_stopwords
+    ), selection = "remove"
+  )
+  # transform to lowercase
+  uni_tokens <- tokens_tolower(uni_tokens)
+  # Stem all words
+  uni_tokens <- tokens_wordstem(uni_tokens)
+  # Create n-grams of any length (including bigrams and trigrams)
+  uni_tokens <- tokens_ngrams(uni_tokens, n = 1:3)
+  uni_dfm <- dfm(uni_tokens)
 
-# Custom Dictionary
-dict_design <- c("design", "color", "look", "style", "appearance")
-tweets$full_text <-
-  str_count(tweets$full_text, paste(dict_design, collapse = "|"))
-tweets$design_occurence <- ifelse(tweets$full_text > 0, 1, 0)
+  uni_word_freqs_df <- data.frame(
+    word = featnames(uni_dfm),
+    freq = colSums(uni_dfm)
+  )
 
-head(word_freqs, 15) %>%
-  as.data.frame() %>%
-  ggplot(aes(x = reorder(names(.), .), y = .)) +
-  geom_col() +
-  coord_flip() +
-  labs(x = "N-grams", y = "Frequency")
+  # Create the word cloud
+  set.seed(1234)
+  wordcloud(
+    words = uni_word_freqs_df$word,
+    freq = uni_word_freqs_df$freq,
+    min.freq = 5,
+    max.words = 100,
+    random.order = FALSE,
+    rot.per = 0.35,
+    colors = brewer.pal(8, "Dark2")
+  )
+  # Save wordcloud
+}
 
-# Bigram and Trigram Analysis
-# TODO
+bi_gram_tokens <- tokens_ngrams(tokens, n = 2)
+bi_gram_matrix <- dfm(bi_gram_tokens)
 
-# Plot Design Topic over Time
-plot_data <- tweets %>%
-  group_by(reviewDate_month) %>%
-  summarize(n = sum(design_occurence))
-ggplot(plot_data, aes(x = reviewDate_month, y = n)) +
-  geom_bar(stat = "identity") +
-  labs(title = "Design Topic Mentions per Month")
+bi_gram_freqs_df <- data.frame(
+  word = featnames(bi_gram_matrix),
+  freq = colSums(bi_gram_matrix)
+)
 
-# Topic Modeling (LDA)
-tweet_corpus <- Corpus(VectorSource(tweets$full_text))
-tweet_dfm <- dfm(tweet_corpus)
+# Create the bigram word cloud
+set.seed(1235) # For reproducibility
+wordcloud(
+  words = bi_gram_freqs_df$word,
+  freq = bi_gram_freqs_df$freq,
+  min.freq = 3,
+  max.words = 100,
+  random.order = FALSE,
+  rot.per = 0.35,
+  colors = brewer.pal(8, "Accent")
+)
 
-lda_model <- LDA(tweet_dfm, k = 5, control = list(seed = 1234))
-topic_terms <- tidy(lda_model, matrix = "beta")
+# Trigram Wordcloud
+tri_gram_tokens <- tokens_ngrams(tokens, n = 3)
+tri_gram_matrix <- dfm(tri_gram_tokens)
 
-topic_terms %>%
+tri_gram_freqs_df <- data.frame(
+  word = featnames(tri_gram_matrix),
+  freq = colSums(tri_gram_matrix)
+)
+
+# Create the trigram word cloud
+set.seed(1236) # For reproducibility
+wordcloud(
+  words = tri_gram_freqs_df$word,
+  freq = tri_gram_freqs_df$freq,
+  min.freq = 2,
+  max.words = 100,
+  random.order = FALSE,
+  rot.per = 0,
+  colors = brewer.pal(8, "Paired")
+)
+
+# TODO: Custom Dictionary?
+
+# LDA Topic Modeling
+# TOOD: Check why word_matric takes forever and doc_matrix does not work
+tweet_lda <- LDA(doc_matrix, k = 5, control = list(seed = 1237))
+# Tidy the LDA results
+topic_terms <- tidy(tweet_lda, matrix = "beta")
+# Extract topics and top terms
+topics <- as.data.frame(terms(tweet_lda, 50)) # First fifty words per topic
+
+# Tidy the LDA results
+tweet_lda_td <- tidy(tweet_lda)
+
+# Extract top terms per topic
+top_terms <- tweet_lda_td %>%
   group_by(topic) %>%
-  top_n(8, beta) %>%
+  top_n(8, beta) %>% # Show top 8 terms per topic
   ungroup() %>%
-  arrange(topic, -beta) %>%
-  ggplot(aes(term, beta, fill = factor(topic))) +
-  geom_col(show.legend = FALSE) +
-  labs(x = NULL, y = "Beta") +
-  facet_wrap(~topic, scales = "free") +
-  coord_flip()
+  arrange(topic, -beta)
 
-
-lda_model <- LDA(doc_matrix, k = 5, control = list(seed = 1234))
-
-topic_terms <- tidy(lda_model, matrix = "beta")
-
-topic_terms %>%
-  group_by(topic) %>%
-  top_n(8, beta) %>%
-  ggplot(aes(term, beta, fill = factor(topic))) +
+# Visualize top terms per topic
+top_terms %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(beta, term, fill = factor(topic))) +
   geom_col(show.legend = FALSE) +
   facet_wrap(~topic, scales = "free") +
-  coord_flip()
-# Style Analysis
-# TODO: Context: Basic sentiment lexicons might miss sarcasm or irony in tweets. Explore pre-trained models or domain-specific lexicons for improved accuracy.
-# TODO: Negation Handling: Consider handling negation words (e.g., "not good") that reverse sentiment.
-# Tweet Length
+  scale_y_reordered() +
+  labs(
+    x = "Beta (Term Importance within Topic)",
+    y = NULL,
+    title = "Top Terms per Topic in Tweets (LDA)"
+  )
+
+# Most different words among topics (using log ratios)
+diff <- tweet_lda_td %>%
+  mutate(topic = paste0("topic", topic)) %>%
+  spread(topic, beta) %>%
+  filter(topic1 > .001 | topic2 > .001 | topic3 > .001) %>%
+  mutate(
+    logratio_t1t2 = log2(topic2 / topic1),
+    logratio_t1t3 = log2(topic3 / topic1),
+    logratio_t2t3 = log2(topic3 / topic2)
+  )
+diff
+
+# Add topic probabilities to original data
+lda_gamma <- tidy(tweet_lda, matrix = "gamma")
+tweets <- tweets %>%
+  mutate(document_id = row_number()) %>% # Add a unique ID for each tweet
+  left_join(lda_gamma, by = c("document_id" = "document"))
+
+# Analyze topics by university
 tweets %>%
-  mutate(tweet_length = nchar(tweet_text)) %>%
+  count(university, topic, wt = gamma) %>%
+  group_by(university) %>%
+  slice_max(n = 3, order_by = n, with_ties = FALSE) %>%
+  ungroup() %>%
+  mutate(topic = paste0("Topic ", topic)) %>%
+  ggplot(aes(x = university, y = n, fill = topic)) +
+  geom_col(position = "dodge") +
+  labs(title = "Top 3 Topics by University", y = "Topic Proportion")
+
+# ----------------------------
+# Style Analysis
+# ----------------------------
+tweets %>%
+  mutate(tweet_length = nchar(full_text)) %>%
   ggplot(aes(x = tweet_length)) +
   geom_histogram() +
   labs(title = "Distribution of Tweet Lengths")
 
-# Emoji Analysis (requires some emoji extraction technique)
-tweets %>%
-  filter(str_detect(tweet_text, "emoji")) %>%
-  select(tweet_text, emojis) %>%
-  unnest_tokens(emoji, emojis) %>%
-  count(emoji, sort = TRUE)
-
 # ----------------------------
 # Sentiment Analysis
 # ----------------------------
+# Sentiment over Time (Assuming you have a 'created_at' column for dates)
+tweets$date <- as.Date(tweets$created_at)
+tweets$month <- month(tweets$created_at)
 
-# Using AFINN Lexicon
+# Calculate Sentiment
+# TODO: Ask if there is a specific sentiment lexicon to use and if by sentence is enough. I think by word is better as in line 385
+tweets$sentiment <- get_sentiment(tweets$full_text,
+  method = "syuzhet", lang = "german"
+)
+
+# Load NRC lexicon
+library(textdata)
+nrc_lexicon <- get_sentiments("nrc")
+
+# Calculate Sentiment (Syuzhet and NRC)
+sentiment_tokens <- tweets %>%
+  select(id, full_text) %>%
+  unnest_tokens(word, full_text) %>%
+  inner_join(nrc_lexicon) %>%
+  mutate(
+    sentiment_syuzhet = get_sentiment(word,
+      method = "syuzhet",
+      lang = "german"
+    ),
+    sentiment_positive = ifelse(sentiment == "positive", 1, 0),
+    sentiment_negative = ifelse(sentiment == "negative", 1, 0)
+  )
+
+# Aggregate sentiment back to the tweet level
+tweet_sentiment <- sentiment_tokens %>%
+  group_by(id) %>%
+  summarize(
+    mean_sentiment_syuzhet = mean(sentiment_syuzhet, na.rm = TRUE),
+    total_positive = sum(sentiment_positive, na.rm = TRUE),
+    total_negative = sum(sentiment_negative, na.rm = TRUE)
+  )
+
+# Join sentiment back to the main dataframe
 tweets <- tweets %>%
-  mutate(sentiment = textdata(full_text) %>%
-    hash_lookup(key = afinn))
+  left_join(tweet_sentiment, by = "id")
 
 # Sentiment over Time
 plot_data <- tweets %>%
-  group_by(reviewDate_month) %>%
-  summarize(mean_sentiment = mean(sentiment))
+  group_by(tweet_month) %>%
+  summarize(
+    mean_sentiment_syuzhet = mean(mean_sentiment_syuzhet, na.rm = TRUE),
+    mean_positive = mean(total_positive, na.rm = TRUE),
+    mean_negative = mean(total_negative, na.rm = TRUE)
+  )
 
-ggplot(plot_data, aes(x = reviewDate_month, y = mean_sentiment)) +
+# Plot Syuzhet sentiment
+ggplot(plot_data, aes(x = tweet_month, y = mean_sentiment_syuzhet)) +
   geom_line() +
-  labs(title = "Mean Sentiment over Time")
+  labs(
+    title = "Mean Syuzhet Sentiment Over Time",
+    y = "Mean Sentiment Score"
+  ) +
+  scale_x_date(date_labels = "%Y-%m") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-# Advanced: Handling Negation
-tweets$negated_sentiment <- tweets$sentiment
-tweets$negated_sentiment[grepl("not\\s", tweets$full_text)] <- -1 * tweets$negated_sentiment
+# Plot NRC positive and negative sentiments
+ggplot(plot_data, aes(x = tweet_month)) +
+  geom_line(aes(y = mean_positive, color = "Positive")) +
+  geom_line(aes(y = mean_negative, color = "Negative")) +
+  labs(
+    title = "Mean NRC Positive & Negative Sentiment Over Time",
+    y = "Mean Sentiment Score"
+  ) +
+  scale_x_date(date_labels = "%Y-%m") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-# Sentiment Scores
-tweets <- tweets %>%
-  mutate(sentiment = get_sentiment(tweet_text))
-
-# Visualize Sentiment Distribution
-tweets %>%
-  ggplot(aes(x = sentiment)) +
-  geom_histogram() +
-  labs(title = "Distribution of Tweet Sentiment")
-
-# Comparison and Visualization
 # Sentiment by University
 tweets %>%
-  ggplot(aes(x = university, y = sentiment, fill = university)) +
+  ggplot(aes(x = university, y = mean_sentiment_syuzhet, fill = university)) +
   geom_boxplot() +
-  labs(title = "Sentiment Comparison Across Universities")
+  labs(title = "Sentiment Comparison Across Universities (Syuzhet)")
 
-# ----------------------------
-# Additional Analysis
-# ----------------------------
 
-cor(tweets$design_occurence, tweets$sentiment)
-
-# Product Ambiguity
-product_sentiment <- tweets %>%
-  group_by(product) %>%
-  summarize(sentiment_var = var(sentiment))
-product_sentiment[order(product_sentiment$sentiment_var, decreasing = TRUE), ]
-
-# ----------------------------
-# Add On Analysis
-# ----------------------------
-all_products <- subset(reviews, text_length > 100)
-
-all_products <- all_products %>%
-  mutate(sentiment = textdata(full_text) %>%
-    hash_lookup(key = afinn))
-
-best_worst_products <- all_products %>%
-  group_by(product) %>%
-  summarize(mean_sentiment = mean(sentiment)) %>%
-  arrange(desc(mean_sentiment))
-
-best_worst_products
 # -------------------------------------------------------------------
 # Question 4: What specific advice can you give us as communication department of BFH based on your analysis? How can we integrate the analysis of tweets in our internal processes, can you think of any data products that would be of value for us?
 # -------------------------------------------------------------------
