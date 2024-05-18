@@ -1,11 +1,27 @@
-# -------------------------------------------------------------------
-# Question 1: How many tweets are being posted by the various Universities when? Are there any 'release' strategies visible? Explain me and show in R how I can generate diagrams and R do explain the interval of the postings.
-# -------------------------------------------------------------------
-
-# Use packages
+---
+title: "Text Mining Groupwork 2: Analysis of Twitter Activities by Swiss Universities of Applied Sciences"
+author: "Your Name"
+date: "2024-05-18"
+output: html_document
+---
+`
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 library(tidyverse)
 library(lubridate)
-
+library(textclean)
+library(wordcloud)
+library(sentimentr)
+library(lexicon)
+library(topicmodels)
+library(tidytext)
+library(quanteda)
+library(stopwords)
+library(syuzhet)
+library(textdata)
+```
+Load the tweets and check if they are loaded correctly
+```{r}
 # Set working directory
 getwd()
 setwd("../../data/")
@@ -16,24 +32,26 @@ load("Tweets_all.rda")
 # Check that tweets are loaded
 head(tweets)
 summary(tweets)
-
+```
+Start preprocessing the tweets, to calculate the intervalls some additional properties are needed.
+```{r}
 # Preprocessing Step: Convert date and time to POSIXct and format according to date, year and university
-tweets$created_at <- as.POSIXct(tweets$created_at, format = "%Y-%m-%d %H:%M:%S")
-tweets$date <- as.Date(tweets$created_at)
-tweets$day <- weekdays(tweets$created_at)
-tweets$day <- factor(tweets$day, levels = c(
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-  "Sunday"
-))
-tweets$year <- year(tweets$created_at)
-tweets$university <- as.character(tweets$university)
-View(tweets)
+tweets <- tweets %>%
+  mutate(
+    created_at = as.POSIXct(created_at, format = "%Y-%m-%d %H:%M:%S"),
+    date = as.Date(created_at),
+    day = weekdays(created_at),
+    day = factor(day, levels = c(
+      "Monday", "Tuesday",
+      "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
+    )),
+    year = year(created_at),
+    university = as.character(university)
+  )
+```
 
+## Question 1: How many tweets are being posted by the various Universities when? Are there any 'release' strategies visible?
+```{r}
 # Count each tweet by university and hour of the day
 tweet_counts_by_hour_of_day <- tweets %>%
   group_by(university, timeofday_hour) %>%
@@ -103,7 +121,6 @@ days_with_most_tweets_by_uni <- tweet_counts_by_week_day %>%
 print(days_with_most_tweets_by_uni)
 
 # Calculate time intervals between tweets
-# Function to calculate mode -> https://stackoverflow.com/questions/2547402/how-to-find-the-statistical-mode
 find_mode <- function(x) {
   ux <- unique(x)
   ux[which.max(tabulate(match(x, ux)))]
@@ -118,7 +135,6 @@ tweets <- tweets %>%
 
 # Descriptive statistics of time intervals
 summary(tweets$time_interval)
-View(tweets)
 
 setwd("../4.Text-Mining-Groupwork/plots")
 unique_years <- tweets$year %>% unique()
@@ -128,7 +144,7 @@ for (curr_year in unique_years) {
   filtered_data <- tweets %>%
     filter(year(created_at) == curr_year)
 
-  ggplot(filtered_data, aes(x = time_interval)) +
+  p <- ggplot(filtered_data, aes(x = time_interval)) +
     geom_histogram(fill = "lightblue") +
     facet_wrap(~university) +
     labs(
@@ -140,53 +156,36 @@ for (curr_year in unique_years) {
     )
 
   ggsave(filename = paste0("time_interval_plot_", curr_year, ".png"))
-  # Save plot if needed
-
+  print(p)
   universities <- filtered_data$university %>% unique()
   for (uni in universities) {
     # Filter data for the specific university
-    filtered_data <- tweets %>%
-      filter(university == uni & year(created_at) == curr_year)
+    uni_filtered_data <- filtered_data %>%
+      filter(university == uni)
     # Calculate mode (most common interval) in hours
-    most_common_interval_minutes <- find_mode(filtered_data$time_interval)
-    # Convert to days for better readability
-    most_common_interval_hours <- most_common_interval_hours / 60
+    most_common_interval_minutes <- find_mode(uni_filtered_data$time_interval)
+    most_common_interval_hours <- most_common_interval_minutes / 60
     print(paste0(
       "Most common time interval for ", uni,
       " in ",
-      year,
-      " is ", most_common_interval_minutes, " minutes"
+      curr_year,
+      " is ", most_common_interval_minutes,
+      " minutes (", most_common_interval_hours, " hours)"
     ))
   }
 }
+```
 
-# -------------------------------------------------------------------
-# Question 2: Content and Reaction Analysis
-# -------------------------------------------------------------------
+## 2. What are the tweets about and how do other Twitter users react to them (likes, etc.)?
 
-
-# -------------------------------------------------------------------
-# Question 3: How do the university tweets differ in terms of content, style, emotions, etc?
-# -------------------------------------------------------------------
-# Data Preprocessing
-library(tidyverse)
-library(textclean)
-library(lubridate)
-library(wordcloud)
-library(sentimentr)
-library(lexicon)
-library(topicmodels)
-library(tidytext)
-library(quanteda)
-library(stopwords)
-library(topicmodels)
-library(tidytext)
-library(syuzhet)
-
+### Load the data and make previous changes undone
+```{r}
 getwd()
 setwd("./data/")
 load("Tweets_all.rda")
-
+```
+### Data Preprocessing
+```{r}
 # Removes: URLS, Emojis, Punctuation, Numbers
 tokens <- tokens(tweets$full_text,
   remove_punct = TRUE,
@@ -195,36 +194,32 @@ tokens <- tokens(tweets$full_text,
   remove_url = TRUE,
   remove_separators = TRUE
 )
-
-# TODO: Optimize stopwords
+# Remove 'amp' as it is not meaningful because its only & symbol
+# Remove 'rt' because it is an word e.g 'engagiert'.
 extended_stopwords <- c(
-  "#fhnw", "#bfh", "@htw_chur", "#hslu", "#supsi"
+  stopwords("english"),
+  stopwords("french"),
+  stopwords("german"),
+  stopwords("italian"),
+  "#fhnw", "#bfh", "@htw_chur", "#hslu", "#supsi",
+  "amp", "rt"
 )
-
-# remove stopwords im multiple languages and remove university hashtags
-# TODO: change with quanteda::dfm and quanteda::tokens()
-tokens <- tokens_select(tokens,
-  pattern = c(
-    stopwords("english"),
-    stopwords("french"),
-    stopwords("german"),
-    stopwords("italian"),
-    extended_stopwords
-  ), selection = "remove"
-)
-
 # transform to lowercase
 tokens <- tokens_tolower(tokens)
 # Stem all words
 tokens <- tokens_wordstem(tokens)
 # Create n-grams of any length (including bigrams and trigrams)
-tokens <- tokens_ngrams(tokens, n = 1:3)
+tokens <- tokens_ngrams(tokens, n = 1)
+# remove stopwords im multiple languages and remove university hashtags
+tokens <- quanteda::tokens_select(tokens,
+  pattern = extended_stopwords,
+  selection = "remove"
+)
 # Create Document-feature-matrix
 doc_matrix <- dfm(tokens)
-
-# ----------------------------
-# Content Analysis
-# ----------------------------
+```
+### Content Analysis
+```{r}
 # Word Frequencies
 word_freqs <- doc_matrix %>%
   colSums() %>%
@@ -249,7 +244,74 @@ wordcloud(
   rot.per = 0.35,
   colors = brewer.pal(8, "Dark2")
 )
+```
+### Userreaction Analysis
+```{r}
+# Identify the tweets with the most likes
+most_liked_tweets <- tweets %>%
+  arrange(desc(favorite_count)) %>%
+  head(1000)
 
+# Analyze the posting time of the most liked tweets
+most_liked_tweets_time <- most_liked_tweets %>%
+  mutate(time_of_day = format(created_at, "%H"))
+
+# Plot the distribution of the posting times
+ggplot(most_liked_tweets_time, aes(x = as.numeric(time_of_day))) +
+  geom_histogram(binwidth = 1, fill = "lightblue", color = "blue") +
+  labs(
+    title = "Distribution of Posting Times for Most Liked Tweets",
+    x = "Hour of Day",
+    y = "Frequency"
+  )
+```
+Analyse the content of the most liked tweets
+```{r}
+# Preprocessing content of most liked tweets
+most_liked_tokens <- tokens(most_liked_tweets$full_text,
+  remove_punct = TRUE,
+  remove_symbols = TRUE,
+  remove_numbers = TRUE,
+  remove_url = TRUE,
+  remove_separators = TRUE
+)
+
+# Apply the same stopword removal and transformations
+most_liked_tokens <- tokens_select(most_liked_tokens,
+  pattern = extended_stopwords, selection = "remove"
+)
+
+most_liked_tokens <- tokens_tolower(most_liked_tokens)
+most_liked_tokens <- tokens_wordstem(most_liked_tokens)
+most_liked_tokens <- tokens_ngrams(most_liked_tokens, n = 1:3)
+most_liked_doc_matrix <- dfm(most_liked_tokens)
+
+# Word Frequencies of Most Liked Tweets
+most_liked_word_freqs <- most_liked_doc_matrix %>%
+  colSums() %>%
+  sort(decreasing = TRUE)
+
+# Create a word cloud for most liked tweets
+most_liked_word_freqs_df <- data.frame(
+  word = featnames(most_liked_doc_matrix),
+  freq = colSums(most_liked_doc_matrix)
+)
+
+set.seed(1234)
+wordcloud(
+  words = most_liked_word_freqs_df$word,
+  freq = most_liked_word_freqs_df$freq,
+  min.freq = 2,
+  max.words = 100,
+  random.order = FALSE,
+  rot.per = 0.35,
+  colors = brewer.pal(8, "Dark2")
+)
+```
+## Question 3: How do the university tweets differ in terms of content, style, emotions, etc?
+
+### Content Analysis (Word Clouds)
+```{r}
 for (uni in unique(tweets$university)) {
   uni_tokens <- tokens(tweets$full_text,
     remove_punct = TRUE,
@@ -259,13 +321,7 @@ for (uni in unique(tweets$university)) {
     remove_separators = TRUE
   )
   uni_tokens <- tokens_select(uni_tokens,
-    pattern = c(
-      stopwords("english"),
-      stopwords("french"),
-      stopwords("german"),
-      stopwords("italian"),
-      extended_stopwords
-    ), selection = "remove"
+    pattern = extended_stopwords, selection = "remove"
   )
   # transform to lowercase
   uni_tokens <- tokens_tolower(uni_tokens)
@@ -291,7 +347,7 @@ for (uni in unique(tweets$university)) {
     rot.per = 0.35,
     colors = brewer.pal(8, "Dark2")
   )
-  # Save wordcloud
+  # TODO: Save wordcloud
 }
 
 bi_gram_tokens <- tokens_ngrams(tokens, n = 2)
@@ -336,10 +392,11 @@ wordcloud(
 )
 
 # TODO: Custom Dictionary?
-
-# LDA Topic Modeling
-# TOOD: Check why word_matric takes forever and doc_matrix does not work
-tweet_lda <- LDA(doc_matrix, k = 5, control = list(seed = 1237))
+```
+### LDA Topic Modeling
+```{r}
+# TODO: Check why word_matric takes forever and doc_matrix does not work
+tweet_lda <- LDA(word_freqs, k = 5, control = list(seed = 1237))
 # Tidy the LDA results
 topic_terms <- tidy(tweet_lda, matrix = "beta")
 # Extract topics and top terms
@@ -396,19 +453,17 @@ tweets %>%
   ggplot(aes(x = university, y = n, fill = topic)) +
   geom_col(position = "dodge") +
   labs(title = "Top 3 Topics by University", y = "Topic Proportion")
-
-# ----------------------------
-# Style Analysis
-# ----------------------------
+```
+### Style Analysis
+```{r}
 tweets %>%
   mutate(tweet_length = nchar(full_text)) %>%
   ggplot(aes(x = tweet_length)) +
   geom_histogram() +
   labs(title = "Distribution of Tweet Lengths")
-
-# ----------------------------
-# Sentiment Analysis
-# ----------------------------
+```
+### Sentiment Analysis
+```{r}
 # Sentiment over Time (Assuming you have a 'created_at' column for dates)
 tweets$date <- as.Date(tweets$created_at)
 tweets$month <- month(tweets$created_at)
@@ -420,7 +475,6 @@ tweets$sentiment <- get_sentiment(tweets$full_text,
 )
 
 # Load NRC lexicon
-library(textdata)
 nrc_lexicon <- get_sentiments("nrc")
 
 # Calculate Sentiment (Syuzhet and NRC)
@@ -485,8 +539,23 @@ tweets %>%
   ggplot(aes(x = university, y = mean_sentiment_syuzhet, fill = university)) +
   geom_boxplot() +
   labs(title = "Sentiment Comparison Across Universities (Syuzhet)")
+```
 
+## Question 4: What specific advice can you give us as communication department of BFH based on your analysis? How can we integrate the analysis of tweets in our internal processes, can you think of any data products that would be of value for us?
 
-# -------------------------------------------------------------------
-# Question 4: What specific advice can you give us as communication department of BFH based on your analysis? How can we integrate the analysis of tweets in our internal processes, can you think of any data products that would be of value for us?
-# -------------------------------------------------------------------
+### Summary key insights from the analysis
+```{r}
+insights <- list(
+  "Most Active Hours" = hours_with_most_tweets_by_uni,
+  "Most Active Days" = days_with_most_tweets_by_uni,
+  "Most Common Time Intervals" = most_common_interval_minutes,
+  "Content Analysis" = word_freqs_df,
+  "Sentiment Analysis" = tweet_sentiment
+)
+```
+# Recommendations:
+# 1. Optimize tweet release times based on peak engagement hours.
+# 2. Focus on specific days with high activity for important announcements.
+# 3. Utilize sentiment analysis to tailor content that resonates positively with the audience.
+# 4. Implement topic modeling to identify key themes and align communication strategy accordingly.
+
