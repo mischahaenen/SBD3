@@ -1,0 +1,371 @@
+---
+title: "Task 1: Wage Prediction Model"
+author: "Fabio Burri, Mischa Haenen, Robin Galeazzi, and Timon Galeazzi"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+## Data Exploration and Preparation: Analyze the features in your dataset to select relevant predictors for the wage.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(dplyr)
+library(caret)
+library(rsample)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(readr)
+library(gbm)
+library(Metrics)
+library(ggplot2)
+library(pROC)
+library(ROCR)
+library(dlookr)
+library(finalfit)
+library(h2o)
+library(data.table)
+library(writexl)
+```
+
+```{r}
+getwd()
+# setwd("./3.Applied-Supervised-Learning-Groupwork")
+load("data_wage.RData")
+
+# Handle missing values
+data_wage <- na.omit(data)
+```
+
+Then our idea was to get a quick overview of the dataset. Which dimensions does the dataset have? Which variable types are used?
+
+```{r}
+dim(data_wage)
+# str(data_wage)
+summary(data_wage)
+head(data_wage, 1)
+# sapply(data_wage, class)
+hist(data_wage$wage, breaks = 30, main = "Distribution of Wages", xlab = "Wage")
+```
+
+We have 10'711 observations with 78 variables like gender, age, country, education, ecetera. We were then interested in getting a visual overview of the most important data and the percentages.
+
+Our aim was then to find the dependent variable (Y), in this case 'wage'.
+
+```{r}
+# names(data_wage)
+summary(data_wage$wage)
+```
+
+We can see that the average salary is over 52,300 dollars. As the average wage is heavily distorted by high salaries - the maximum is 551,600 dollars - the median of just over 34,500 dollars is more meaningful. Because the minimum value is zero, we were interested to see how many people stated 0 as their salary (e.g. students).
+```{r create subset nozero_wage, echo=FALSE, message=FALSE, warning=FALSE}
+zero_count <- sum(data_wage$wage == 0)
+cat("Number of observations with zero wage:", zero_count, "\n")
+
+nonzero_wage <- data_wage %>% filter(wage > 0)
+```
+
+This amounted to a total of 1000 people. we then created another dataset without the people who entered 0 in the wage.
+The average value is 57,700 dollars, the median is 43,100 dollars.Additionally, we would like to show the distribution of wages graphically.
+
+```{r vizualising wage distribution, echo=FALSE, message=FALSE, warning=FALSE}
+boxplot(data_wage$wage,
+  main = "Distribution of Wages", ylab = "Wage", col = "green",
+  notch = TRUE,
+  outline = FALSE
+)
+abline(h = mean(data_wage$wage), col = "red", lwd = 2, lty = 2)
+
+data_wage %>%
+  ggplot(aes(x = wage)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+  labs(title = "Distribution of Wages", x = "Wage", y = "Frequency")
+
+boxplot(nonzero_wage$wage,
+  main = "Distribution of Wages (without wage 0)",
+  ylab = "Wage", col = "blue",
+  notch = TRUE,
+  outline = FALSE
+)
+abline(h = mean(data_wage$wage), col = "red", lwd = 2, lty = 2)
+
+nonzero_wage %>%
+  ggplot(aes(x = wage)) +
+  geom_histogram(bins = 30, fill = "lightgreen", color = "black") +
+  labs(
+    title = "Distribution of Wages (without zero wages)",
+    x = "Wage", y = "Frequency"
+  )
+```
+
+It was relevant for us to work with the complete data (including all upward outliers). On the other hand, we also work with the answers that have a salary of 0. We believe that not to earn any money is also relevant for our statistics. These could be people who are looking for a job or students. This is also part of a prediction model for future salaries.
+
+We will then analyze the categorical and numerical values separately. By looking at the data we found out, that only "wage" is a numeric variable. That's why we then focused on the most important data besides the wage: gender, age, experience, country, and education.
+
+```{r categorial variables, echo=FALSE, message=FALSE, warning=FALSE}
+# data preprocessing for experience
+data_wage <- data_wage %>%
+  mutate(
+    experience = factor(
+      years_experience,
+      levels = c(
+        "0-1", "1-2", "2-3", "3-4", "4-5", "5-11",
+        "11-15", "15-20", "20-25", "25-30", "30 +"
+      ),
+      ordered = TRUE
+    )
+  ) %>%
+  select(-years_experience)
+
+# Visualize the distribution of wages
+hist(data_wage$wage,
+  breaks = 30,
+  main = "Distribution of Wages", xlab = "Wage"
+)
+
+# Analyzing categorical variables
+categorical_vars <- c("gender", "age", "country", "education")
+for (var in categorical_vars) {
+  data_wage %>%
+    ggplot(aes(x = factor(!!sym(var)))) +
+    geom_bar(fill = "steelblue") +
+    labs(title = paste("Distribution of", var), x = var, y = "Frequency") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
+```
+
+After these analyses, we concentrated on the top earners. In other words, we looked for the top 5% of earners.
+
+```{r top earners, echo=FALSE, message=FALSE, warning=FALSE}
+top_earners <- data_wage %>%
+  filter(wage >= quantile(wage, 0.95, na.rm = TRUE))
+
+dim(top_earners)
+summary(top_earners$gender)
+summary(top_earners$age)
+summary(top_earners$experience)
+summary(top_earners$country)
+summary(top_earners$education)
+```
+
+We see that the top 5% of the highest earners include a total of 536 people) 491 men and 38 women. The analysis of the top 5% shows that people between the ages of 30 and 34 earn the most. In terms of experience, it is people with between 5 and 11 years of work experience who earn the most. 380 of the people come from the USA, which is no surprise in this case, as most of the respondents come from the USA. However, it is interesting to note that 255 of the 536 people have a master's degree, while only 160 have a doctorate.
+
+Then our goal was to scale numeric data to ensure that features have a similar range of values. After that our goal was to convert categorical variables into a format suitable for modeling.
+
+```{r }
+# One-hot encode categorical variables and scale numeric variables
+# Convert character columns to factors
+# Scale numeric columns
+# Encode factors
+data_encoded <- data_wage %>%
+  mutate(across(where(is.character), factor)) %>%
+  mutate(across(where(is.numeric), scale)) %>%
+  mutate(across(where(is.factor), ~ as.numeric(as.factor(.x)) - 1))
+
+# Apply dummy variable encoding
+dummies <- dummyVars(" ~ .", data = data_encoded)
+data_transformed <- as.data.frame(predict(dummies, newdata = data_encoded))
+# Add the target variable back to the transformed data
+data_transformed$wage <- data_wage$wage
+```
+
+Now it is time to decide which variables (characteristics) to include in the model, based on their potential relationship to the target variable "wage".
+
+## Model Selection and Training: Choose appropriate regression models from the theory (linear regression, regression tree, random forest) and train them on your data.
+
+```{r}
+# Split data into training and testing sets
+set.seed(123) # Set seed for reproducibility
+split <- initial_split(data_transformed, prop = 0.7)
+train_data <- training(split)
+test_data <- testing(split)
+
+
+# Create helper functions to build and evaluate models
+train_and_evaluate_model <- function(model_type, data) {
+  set.seed(123) # Set seed for reproducibility
+  train_control <- trainControl(method = "cv", number = 5)
+
+  model <- train(
+    wage ~ .,
+    data = data,
+    method = model_type,
+    trControl = train_control
+  )
+
+  return(model)
+}
+
+# Train models
+lm_model <- train_and_evaluate_model("lm", train_data)
+# varImpPlot does not work if train_and_evaluate_model is used with "rf"
+rf_model <- rf_model <- randomForest(wage ~ .,
+  data = train_data,
+  importance = TRUE
+)
+gbm_model <- train_and_evaluate_model("gbm", train_data)
+```
+
+## Model Evaluation: Assess the performance of your models using metrics like RMSE.
+
+```{r}
+# Compare models using RMSE
+model_list <- list(
+  "Linear Regression" = lm_model,
+  "Random Forest" = rf_model, "Gradient Boosting" = gbm_model
+)
+
+# Make predictions on the test data
+predictions_lm <- predict(lm_model, newdata = test_data)
+predictions_rf <- predict(rf_model, newdata = test_data)
+predictions_gbm <- predict(gbm_model, newdata = test_data)
+
+# Calculate RMSE values
+rmse_lm <- RMSE(predictions_lm, test_data$wage)
+rmse_rf <- RMSE(predictions_rf, test_data$wage)
+rmse_gbm <- RMSE(predictions_gbm, test_data$wage)
+
+# Print RMSE values
+cat("RMSE (Linear Regression):", rmse_lm, "\n")
+cat("RMSE (Random Forest):", rmse_rf, "\n")
+cat("RMSE (Gradient Boosting):", rmse_gbm, "\n")
+```
+
+## Model Explanation: Apply explainability techniques (e.g., examining coefficients, feature importance) to understand how the model makes predictions.
+
+```{r}
+# Variable Importance Plot for Random Forest
+varImpPlot(rf_model)
+
+# Summary of Linear Regression Model
+summary(lm_model)
+
+# Summary of Gradient Boosting Model
+summary(gbm_model)
+```
+
+## Wage Prediction: Use the best-performing model to predict the wages for your team members.
+```{r}
+# Wage prediction for team members (invented data)
+set.seed(1234)
+new_data <- data.frame(
+  gender = factor(c("male", "male", "female", "male")),
+  age = factor(c("25", "32", "40", "38"),
+    levels = levels(data_transformed$age)
+  ),
+  country = factor(c("Switzerland", "Germany", "USA", "India"),
+    levels = levels(data_transformed$country)
+  ),
+  education = factor(c("Bachelor", "Master", "PhD", "High School"),
+    levels = levels(data_transformed$education)
+  ),
+  experience = factor(c("3-4", "5-11", "15-20", "1-2"),
+    levels = levels(data_transformed$experience)
+  )
+)
+#new_data_transformed <- as.data.frame(predict(dummies, newdata = new_data))
+# TODO: Perhaps it does not work because there are variables missing in the new data I think you could train a new model with only the variables that are present in the new data but It wil change the models
+setdiff(names(data_transformed), names(new_data))
+
+#predicted_wages <- predict(gbm_model, newdata = new_data_transformed)
+# Here you can see the predicted wages from the test data but it is transformed and not the actual wage is shown
+predicted_wages <- predict(gbm_model, newdata = test_data)
+print(predicted_wages)
+
+# Conclusion
+best_model_name <- names(which.min(c(rmse_lm, rmse_rf, rmse_gbm)))
+best_rmse <- min(c(rmse_lm, rmse_rf, rmse_gbm))
+cat(
+  "The best-performing model was", best_model_name,
+  "with an RMSE of", best_rmse, ".\n"
+)
+cat("The main features driving wage predictions were: ")
+cat("Future improvements could include:")
+```
+
+## H2O AutoML analysis
+
+```{r}
+# H2O AutoML Setup
+h2o.init()
+
+# Convert the dataset to H2O object
+h2o_data <- as.h2o(data_transformed)
+
+# Split dataset into training and validation sets
+splits <- h2o.splitFrame(h2o_data, ratios = c(0.8), seed = 12)
+train <- splits[[1]]
+valid <- splits[[2]]
+
+# Set the dependent variable
+dep_var <- "wage"
+
+# Run H2O AutoML
+automl <- h2o.automl(
+  x = setdiff(colnames(h2o_data), dep_var),
+  y = dep_var,
+  training_frame = train,
+  max_runtime_secs = 600,
+  seed = 12
+)
+
+# View leaderboard of models generated by AutoML
+lb <- automl@leaderboard
+print(lb, n = nrow(lb))
+
+# Export leaderboard to Excel
+lb_table <- as.data.table(lb)
+write_xlsx(lb_table, "./data/trained_ML_models.xlsx")
+
+# Find the best performing model per a certain criterion and explore it
+best_model <- h2o.get_best_model(automl, criterion = "rmse")
+best_model
+
+# Predictions and performance on the validation set
+pred_best_model <- h2o.predict(best_model, valid)
+perf_best_model <- h2o.performance(best_model, valid)
+
+# Summarize the performance
+rmse <- h2o.rmse(perf_best_model)
+mae <- h2o.mae(perf_best_model)
+r2 <- h2o.r2(perf_best_model)
+
+cat("RMSE:", rmse, "\n")
+cat("MAE:", mae, "\n")
+cat("R-squared:", r2, "\n")
+
+# Plot overall best model performance
+exp_automl <- h2o.explain(automl, valid)
+print(exp_automl)
+
+# Plot the ROC and the Precision-Recall curve based on algorithm criteria
+# TODO: auc is in the example code but here not present, ask why
+GBM_auc <- h2o.get_best_model(automl, algorithm = "GBM", criterion = "rmse")
+GLM_auc <- h2o.get_best_model(automl, algorithm = "GLM", criterion = "rmse")
+DRF_auc <- h2o.get_best_model(automl, algorithm = "DRF", criterion = "rmse")
+DL_auc <- h2o.get_best_model(automl,
+  algorithm = "DeepLearning",
+  criterion = "rmse"
+)
+XGB_auc <- h2o.get_best_model(automl, algorithm = "XGBoost", criterion = "rmse")
+
+
+exp_GBM <- h2o.explain(GBM_auc, valid) # Explain the best performing GBM model
+print(exp_GBM)
+exp_GLM <- h2o.explain(GLM_auc, valid) # Explain the best performing GLM model
+print(exp_GLM)
+exp_DRF <- h2o.explain(DRF_auc, valid) # Explain the best performing DRF model
+print(exp_DRF)
+exp_DL <- h2o.explain(DL_auc, valid) # Explain the best performing DL model
+print(exp_DL)
+exp_XGB <- h2o.explain(XGB_auc, valid) # Explain the best performing XGB model
+print(exp_XGB)
+
+# Conclusion and future work
+cat(
+  "The best-performing model was", best_model@model_id,
+  "with an RMSE of", rmse, ".\n"
+)
+cat("The main features driving wage predictions were:")
+cat("Future improvements could include: ")
+```
