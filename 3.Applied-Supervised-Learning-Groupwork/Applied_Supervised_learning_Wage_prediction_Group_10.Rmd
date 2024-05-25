@@ -31,7 +31,9 @@ library(xgboost)
 
 ```{r}
 # Load the dataset
-load("data_wage.RData")
+# getwd()
+# setwd("./3.Applied-Supervised-Learning-Groupwork")
+load("./data_wage.RData")
 
 # Handle missing values by removing rows with NAs
 data_wage <- na.omit(data)
@@ -153,11 +155,10 @@ data_encoded <- data_wage %>%
   mutate(across(where(is.character), factor)) %>%
   mutate(across(where(is.numeric), scale)) %>%
   mutate(across(where(is.factor), ~ as.numeric(as.factor(.x)) - 1))
-
-# Apply dummy variable encoding
+# Add the target variable back to the transformed data
 dummies <- dummyVars(" ~ .", data = data_encoded)
 data_transformed <- as.data.frame(predict(dummies, newdata = data_encoded))
-# Add the target variable back to the transformed data
+# Add the target variable back
 data_transformed$wage <- data_wage$wage
 ```
 
@@ -170,18 +171,19 @@ In this chapter we have trained different models (linear regression, regression 
 ```{r}
 # Split data into training and testing sets
 set.seed(123)
-split <- initial_split(data_transformed, prop = 0.7)
+split <- initial_split(data_transformed, prop = 0.8)
 train_data <- training(split)
 test_data <- testing(split)
-
 # Helper function for model training and evaluation
 train_and_evaluate_model <- function(model_type, data) {
   set.seed(123)
+  # Define cross-validation method: Cross Validation with 5 folds means that the data is split into 5 parts, and the model is trained on 4 parts and tested on the 5th part. This process is repeated 5 times.
   train_control <- trainControl(method = "cv", number = 5)
 
   if (model_type == "xgbTree") {
+    data_no_wage <- data[, !names(data) %in% "wage"]
     model <- train(
-      x = as.matrix(data[, -ncol(data)]),
+      x = data_no_wage,
       y = data$wage,
       method = model_type,
       trControl = train_control,
@@ -197,9 +199,9 @@ train_and_evaluate_model <- function(model_type, data) {
   }
   return(model)
 }
-
 # Train models
 lm_model <- train_and_evaluate_model("lm", train_data)
+# We have to use the randomForest package for the random forest model and not the train_and_evaluate_model function otherwise  varImpPlot will throw an type error.
 rf_model <- randomForest(
   wage ~ .,
   data = train_data, ntree = 50, mtry = 3, importance = TRUE, cp = 0
@@ -208,8 +210,8 @@ gbm_model <- train_and_evaluate_model("gbm", train_data)
 xgboost_model <- train_and_evaluate_model("xgbTree", train_data)
 
 # Hyperparameter tuning using Grid Search and Random Search
+# This is an example for Random Forest and GBM models, we could fine tune the other models as well but for the sake of time we will not do this.
 set.seed(123)
-
 # Grid search for Random Forest
 rf_grid <- expand.grid(mtry = c(2, 3, 4))
 rf_control <- trainControl(method = "cv", number = 5, search = "grid")
@@ -220,6 +222,7 @@ rf_tuned <- train(
 )
 
 # Random search for GBM
+set.seed(123)
 gbm_grid <- expand.grid(
   n.trees = c(100, 150, 200),
   interaction.depth = c(1, 3, 5),
@@ -239,102 +242,130 @@ gbm_tuned <- train(
 Following the training of the models we evaluate here which modes is the best performing. We will asses this using the metric RMSE.
 
 ```{r}
-# Compare models using RMSE
+# Define your model list (including tuned models if applicable)
 model_list <- list(
   "Linear Regression" = lm_model,
-  "Random Forest" = rf_model, "Gradient Boosting" = gbm_model,
-  "XGBoost" = xgboost_model
+  "Random Forest" = rf_model,
+  "Gradient Boosting" = gbm_model,
+  "XGBoost" = xgboost_model,
+  "Random Forest Tuned" = rf_tuned,
+  "Gradient Boosting Tuned" = gbm_tuned
 )
 
-# Make predictions on the test data
-predictions_lm <- predict(lm_model, newdata = test_data)
-predictions_rf <- predict(rf_model, newdata = test_data)
-predictions_gbm <- predict(gbm_model, newdata = test_data)
-predictions_xgboost <- predict(xgboost_model, newdata = test_data)
+# Create empty lists to store results
+predictions_list <- list()
+rmse_values <- c()
+mae_values <- c()
+r2_values <- c()
 
-# Calculate RMSE values
-rmse_lm <- RMSE(predictions_lm, test_data$wage)
-rmse_rf <- RMSE(predictions_rf, test_data$wage)
-rmse_gbm <- RMSE(predictions_gbm, test_data$wage)
-rmse_xgboost <- RMSE(predictions_xgboost, test_data$wage)
+# Iterate through the models
+for (model_name in names(model_list)) {
+  model <- model_list[[model_name]]
+  # Make predictions
+  predictions <- predict(model, newdata = test_data)
+  predictions_list[[model_name]] <- predictions # Store predictions
+  # Calculate and store metrics
+  rmse_values[model_name] <- RMSE(predictions, test_data$wage)
+  mae_values[model_name] <- MAE(predictions, test_data$wage)
+  r2_values[model_name] <- R2(predictions, test_data$wage)
+  # Print metrics for each model
+  cat("Metrics for", model_name, "model:\n")
+  cat("RMSE (", model_name, "):", rmse_values[model_name], "\n")
+  cat("MAE (", model_name, "):", mae_values[model_name], "\n")
+  cat("R-squared (", model_name, "):", r2_values[model_name], "\n")
+  cat("\n")
+}
 
-# Print RMSE values
-cat("RMSE (Linear Regression):", rmse_lm, "\n")
-cat("RMSE (Random Forest):", rmse_rf, "\n")
-cat("RMSE (Gradient Boosting):", rmse_gbm, "\n")
-cat("RMSE (XGBoost):", rmse_xgboost, "\n")
+# Create data for visualization
+comparison <- data.frame(Actual = test_data$wage)
+for (model_name in names(predictions_list)) {
+  comparison[[model_name]] <- predictions_list[[model_name]]
+}
 
-# Additional metrics
-mae_lm <- MAE(predictions_lm, test_data$wage)
-mae_rf <- MAE(predictions_rf, test_data$wage)
-mae_gbm <- MAE(predictions_gbm, test_data$wage)
-mae_xgboost <- MAE(predictions_xgboost, test_data$wage)
-
-r2_lm <- R2(predictions_lm, test_data$wage)
-r2_rf <- R2(predictions_rf, test_data$wage)
-r2_gbm <- R2(predictions_gbm, test_data$wage)
-r2_xgboost <- R2(predictions_xgboost, test_data$wage)
-
-# Print additional metrics
-cat("MAE (Linear Regression):", mae_lm, "\n")
-cat("MAE (Random Forest):", mae_rf, "\n")
-cat("MAE (Gradient Boosting):", mae_gbm, "\n")
-cat("MAE (XGBoost):", mae_xgboost, "\n")
-cat("R-squared (Linear Regression):", r2_lm, "\n")
-cat("R-squared (Random Forest):", r2_rf, "\n")
-cat("R-squared (Gradient Boosting):", r2_gbm, "\n")
-cat("R-squared (XGBoost):", r2_xgboost, "\n")
-
-# Visual comparison of predicted vs. actual wages
-comparison <- data.frame(
-  Actual = test_data$wage,
-  LM_Predicted = predictions_lm,
-  RF_Predicted = predictions_rf,
-  GBM_Predicted = predictions_gbm,
-  XGBoost_Predicted = predictions_xgboost
+# Reshape data for ggplot
+comparison_long <- tidyr::pivot_longer(comparison,
+  -Actual,
+  names_to = "Model", values_to = "Predicted"
 )
 
-ggplot(comparison, aes(x = Actual)) +
-  geom_point(aes(y = LM_Predicted, color = "Linear Regression")) +
-  geom_point(aes(y = RF_Predicted, color = "Random Forest")) +
-  geom_point(aes(y = GBM_Predicted, color = "Gradient Boosting")) +
-  geom_point(aes(y = XGBoost_Predicted, color = "XGBoost")) +
-  labs(title = "Predicted vs. Actual Wages", x = "Actual Wage", y = "Predicted Wage") +
-  theme_minimal()
+# Visual comparison
+ggplot(comparison_long, aes(x = Actual, y = Predicted, color = Model)) +
+  geom_point() +
+  labs(
+    title = "Predicted vs. Actual Wages",
+    x = "Actual Wage", y = "Predicted Wage"
+  ) +
+  theme_minimal() +
+  facet_wrap(~Model)
 ```
-# TODO: Adapt timon; And is RSME enough to explain? Maybe add more metrics
-As you can see here, Gradient Boosting is the best performing model with the lowest RMSE of 0.7060181 while the Linear Regression is the worst one with an RMSE of 0.79862. therefore we have chosen to use the Gradient Boosting model for our predictions. but before we get into this we define some variables which have the highest coefficients to get the most accurate prediction with as few variables as possible.
+
+The Gradient Boosting and XGBoost models show the best performance, with Gradient Boosting slightly edging out XGBoost in terms of RMSE and MAE.
+
+Here's a breakdown of the model performance:
+
+- RMSE (Root Mean Squared Error): Gradient Boosting has a slightly higher RMSE (43573.9) compared to XGBoost (43005.61), suggesting a marginally smaller average prediction error.
+- MAE (Mean Absolute Error): Similarly, Gradient Boosting has a slightly higher MAE (24697.86) than XGBoost (23676.49), indicating a slightly smaller average absolute deviation from the actual wages.
+- R-squared: Both models have very high R-squared values (0.503 for Gradient Boosting and 0.519 for XGBoost), indicating they explain a substantial portion of the variance in wages.
+
+Interpretation of the Plot:
+The plot visually supports these findings. The Gradient Boosting (red) and XGBoost (purple) predictions are the most tightly clustered around the diagonal line representing a good prediction. This shows their better accuracy compared to the other models. The other model predictions are more scattered.
+
+Important Considerations:
+- Marginal Difference: The difference in performance between Gradient Boosting and XGBoost is very small. It does not care which model we chose. We will predict the wages for the team members with both models.
+- Overfitting Risk: There might be a slight risk of overfitting for Gradient Boosting and XGBoost due to their high R-squared values.
+- Random Forest: The Random Forst Modell is not trained with the model function and therefore a fair comparison is not possible. However, the Random Forest model is also a good model for predicting wages.
 
 ## Model Explanation
 
-Here we aim to see which variables have the highest correlation with the variable wage.
-
+Here we aim to see which variables have the highest correlation with the variable wage. We will use the variable importance plot to see which variables are the most important for the model.
 ```{r}
-# Variable Importance Plot for Random Forest
+# Variable importance for Random Forest model
 varImpPlot(rf_model)
-
-# Summary of Linear Regression Model
-summary(lm_model)
-
-# Summary of Gradient Boosting Model
-summary(gbm_model)
-
-# Summary of XGBoost Model
-summary(xgboost_model)
+# Summary for all models
+for (model_name in names(model_list)) {
+  model <- model_list[[model_name]]
+  var_imp <- varImp(model)
+  cat("Variable Importance for", model_name, "Model:\n")
+  print(var_imp)
+  cat("\n")
+  summary(model)
+  cat("\n")
+}
 ```
-# TODO: Adapt timon
-For the gbm model we have the top performers country, age, job role, ML_atwork and more. but first we decided to try the prediction with different variables to see how accurate these predictions are if we do not use those variables suggested, or at least not all of them.
+
+### Insights from Model Comparison (General):
+Several key factors show a strong explainability of wages across all models, indicating their fundamental importance in determining wages:
+
+- Country: Geographic country plays a major role, likely reflecting variations in cost of living, industry concentration, and demand for machine learning talent.
+- Age and Experience: Age and years of experience are consistently strong predictors, suggesting that wages generally increase with professional maturity and expertise.
+- Job Role: The specific job role within the field of machine learning significantly impacts salary, as different roles require varying levels of specialization and responsibility.
+- Coding Experience (for Data Analysis): The length of time spent coding for data analysis emerges as a crucial factor, highlighting the value placed on practical programming skills.
+- Machine Learning Usage at Work (ML_atwork): Whether or not someone utilizes machine learning in their work is a consistent predictor, underscoring the premium placed on applied ML skills.
+- Cloud Experience (AWS): Experience with Amazon Web Services (AWS) stands out as a significant factor, reflecting the widespread adoption of AWS in the industry and the demand for cloud expertise.
+- Domain-Specific Factors: Various domain-specific variables, such as those relating to specific machine learning activities or framework usage, also demonstrate considerable influence.
+
+### Model-Specific Insights
+#### Linear Regression:
+The linear regression model heavily emphasizes country, age, and experience, aligning with the expectation of linear relationships between these factors and salary. AWS experience is notably prominent, suggesting a potential salary premium for professionals with this skill.
+#### Random Forest:
+Compared to linear regression, the random forest model distributes importance more evenly across various predictors. country, age, job role, and experience remain significant factors. Notably, specific programming languages and tools gain importance, indicating that tool preferences might influence salary in complex, non-linear ways.
+#### Gradient Boosting:
+Similar to the random forest, but with a stronger focus on country, age, and job role. Time spent coding for data analysis emerges as a top predictor, reinforcing the value of practical coding skills in this domain.
+#### XGBoost:
+The XGBoost model closely aligns with the Gradient Boosting model in terms of variable importance, with country, age, coding experience, and job role as the top predictors. This allignment between the two top-performing models provides strong evidence for the relevance of these factors in determining salary.
+#### Tuned Models (Random Forest and Gradient Boosting):
+The tuned models generally exhibit similar variable importance patterns as their untuned counterparts, with minor shifts in rankings. This suggests that the overall relationships between predictors and salary remain relatively stable, even after hyperparameter tuning.
 
 ## Wage Prediction:
 
 We have decided to use gender, age, country, education and experience.
 
 ```{r}
-# Wage prediction for team members (invented data)
-set.seed(1234)
+# Load and prepare the team data
+set.seed(123)
 team_data <- read_csv("./team_data.csv")
 
-# Add experience column
+# Add experience column with consistent levels
 team_data$experience <- factor(
   team_data$years_experience,
   levels = c(
@@ -343,36 +374,51 @@ team_data$experience <- factor(
   ),
   ordered = TRUE
 )
-
+# Remove years_experience column and first column
+team_data <- team_data[, -1] %>% select(-years_experience)
+# Ensure factor levels in team_data match those in data_wage
+for (col in names(team_data)) {
+  if (is.character(team_data[[col]])) {
+    levels_in_wage_data <- levels(data_wage[[col]])
+    team_data[[col]] <- factor(team_data[[col]], levels = levels_in_wage_data)
+  }
+}
 # One-hot encode categorical variables and scale numeric variables
 team_data_encoded <- team_data %>%
-  mutate(across(where(is.character), factor)) %>%
-  mutate(across(where(is.numeric), scale)) %>%
+  mutate(across(
+    where(is.character),
+    ~ factor(.x, levels = levels(data_wage[[cur_column()]]))
+  )) %>%
+  mutate(across(where(is.numeric), ~ scale(.x))) %>%
   mutate(across(where(is.factor), ~ as.numeric(as.factor(.x)) - 1))
-
 # Apply dummy variable encoding
 team_data_transformed <- as.data.frame(
   predict(dummies, newdata = team_data_encoded)
 )
-
-# Use the best-performing model from H2O AutoML for predictions
-pred_best_model <- as.data.frame(h2o.predict(best_model, as.h2o(team_data_transformed)))
-predicted_wages <- pred_best_model$predict
-print(predicted_wages)
-
-# Conclusion
-cat(
-  "The best-performing model was", best_model@model_id,
-  "with an RMSE of", rmse, ", MAE of", mae, ", and R-squared of", r2, ".\n"
-)
-
-cat("The main features driving wage predictions were:\n")
-print(var_imp)
-
-cat("Future improvements could include:")
+# replace NAs with 0
+team_data_transformed[is.na(team_data_transformed)] <- 0
+# Use XGBoost model for prediction
+pred_xgboost <- predict(xgboost_model, newdata = team_data_transformed)
+print(pred_xgboost)
+# Use Gradient Boosting model for prediction
+pred_gbm <- predict(gbm_model, newdata = team_data_transformed)
+print(pred_gbm)
 ```
-TODO: Adapt timon
-We can see the predicted_wages for the team members. The best performing model was the MODELNAME model with an RMSE of XXXX. The main features driving wage predictions were country, age, job role, ML_atwork, and more. Future improvements could include: ...
+Until the end we could not factor the data_wage properties to our custom team data set which is why we could not predict the wages for the team members.
+### Interpreting the Predictions:
+
+- XGBoost: Predicts wages of 57900, 28384, 40068, and 46464 for the four team members, respectively.
+- Gradient Boosting: Predicts wages of 28587, 16727, 20804, and 25892 for the four team members. Here when the NA values would not be replaced with 0, the predictions would not work.
+### Noticeable Differences:
+
+The XGBoost model predicts significantly higher wages for the first and fourth team members compared to the Gradient Boosting model. We think this is due to the different ways the models handle the relationships between predictors and wages.
+### Impact of Replacing NAs with 0:
+
+Replacing missing values (NAs) with zeros will propably distort the predictions:
+
+- Meaning Change: Zeros has a specific meaning in data (e.g., absence of a characteristic). Replacing NAs with zeros has changed the interpretation of the data.
+- Skewed Relationships: Zeros skew the relationships between variables. If a model learned a relationship based on actual zeros, it make incorrect assumptions.
+- Loss of Information: Replacing NAs with zeros discards information.
 
 ## H2O AutoML analysis
 
@@ -426,15 +472,24 @@ cat("MAE (Stacked Ensemble):", mae, "\n")
 cat("R-squared (Stacked Ensemble):", r2, "\n")
 
 # Variable Importance for Stacked Ensemble Model
-var_imp <- h2o.varimp(best_model)
-print(var_imp)
-h2o.varimp_plot(best_model)
+summary(best_model)
 
-# Conclusion and future work
+# Use the best-performing model from H2O AutoML for predictions
+pred_best_model <- as.data.frame(h2o.predict(best_model, as.h2o(team_data_transformed)))
+predicted_wages <- pred_best_model$predict
+print(predicted_wages)
+
+# Conclusion
 cat(
   "The best-performing model was", best_model@model_id,
-  "with an RMSE of", rmse, ".\n"
+  "with an RMSE of", rmse, ", MAE of", mae, ", and R-squared of", r2, ".\n"
 )
-cat("The main features driving wage predictions were: ")
-cat("Future improvements could include: ")
 ```
+We see that h2o did not lead to a better model.
+### Model Details:
+Type: Stacked ensemble model (H2ORegressionModel: stackedensemble), meaning it combines predictions from multiple base models to make a final prediction.
+Stacking Strategy: The ensemble uses cross-validation to train and combine the base models, same as we used previously
+Base Models: It uses 11 out of a possible 43 base models. These are all Gradient Boosting Machine (GBM) models.
+Metalearner: A Generalized Linear Model (GLM) is used as the metalearner, which learns how to best combine the predictions of the base models.
+
+Still the h2o model did not lead to a better model. We will stick to the XGBoost model for our predictions.
