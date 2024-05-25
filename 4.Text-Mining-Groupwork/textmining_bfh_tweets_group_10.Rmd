@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 library(tidyverse)
 library(lubridate)
 library(textclean)
-library(wordcloud)
+library(wordcloud2)
 library(sentimentr)
 library(lexicon)
 library(topicmodels)
@@ -21,46 +21,62 @@ library(syuzhet)
 library(textdata)
 library(cld3)
 library(tidyEmoji)
+library(dplyr)
+library(lubridate)
+library(reshape2)
+library(stopwords)
 ```
 Load the tweets and check if they are loaded correctly
 ```{r}
 # Set working directory
-getwd()
-setwd("../data/")
+# getwd()
+# setwd("./data/")
 
 # Load data
-load("Tweets_all.rda")
+load("./data/Tweets_all.rda")
 
 # Check that tweets are loaded
 head(tweets)
 summary(tweets)
 ```
-Start preprocessing the tweets, to calculate the intervalls some additional properties are needed.
+Start preprocessing the tweets, to calculate the intervalls some additional properties are needed. We also extract the emojis from the tweets. So the emojis are written as text and can be analyzed in the wordcloud better. We also detect the language of the tweets to make separate wordclouds.
 ```{r}
-# Preprocessing Step: Convert date and time to POSIXct and format according to date, year and university
-
+# Preprocessing Step: Convert date and time to POSIXct and format according to date, year and university. Detect language and extract emojis. The days are sorted from the system locale starting from monday
 tweets <- tweets %>%
   mutate(
     created_at = as.POSIXct(created_at, format = "%Y-%m-%d %H:%M:%S"),
     date = as.Date(created_at),
-    day = weekdays(created_at),
-    day = factor(day, levels = c(
-      "Monday", "Tuesday",
-      "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
-    )),
+    day = wday(created_at,
+      label = TRUE, abbr = FALSE,
+      week_start = getOption("lubridate.week.start", 1),
+      locale = Sys.getlocale("LC_TIME")
+    ),
     year = year(created_at),
+    month = floor_date(created_at, "month"),
     university = as.character(university),
-    language = detect_language(full_text)
+    lang = detect_language(full_text),
+    full_text_emojis = replace_emoji(full_text, emoji_dt = lexicon::hash_emojis)
   )
 
+# Remove Emoji Tags helper funciton
+# replace emoji places the emojis in the text as tags and their name, we remove them here
+remove_emoji_tags <- function(text) {
+  str_remove_all(text, "<[a-z0-9]{2}>")
+}
+# Remove Emoji Tags
+tweets$full_text_emojis <- sapply(tweets$full_text_emojis, remove_emoji_tags)
+
+# Store emojis in a sep arate column to analyze later
 tweets$emoji_unicode <- tweets %>%
   emoji_extract_nest(full_text) %>%
   select(.emoji_unicode)
-
-# TODO: store name as well
 ```
 
 ## Question 1: How many tweets are being posted by the various Universities when? Are there any 'release' strategies visible?
+
+- **Most active hours**: Each university has a distinct peak hour for tweeting, often aligning with typical working hours (9 AM - 5 PM). This suggests a strategic approach to reach their target audience when they are most likely online.
+- **Most active days**:  There isn't a consistent "most active day" across universities. Some favor weekdays, while others show higher activity on weekends. This could reflect differences in their target audience or the nature of their content.
+- **Release strategies**: While there are peak hours and days, the time intervals between tweets vary significantly within each university. This indicates a less rigid release strategy and perhaps a more reactive approach to current events or trends.
 ```{r}
 # Count each tweet by university and hour of the day
 tweet_counts_by_hour_of_day <- tweets %>%
@@ -109,16 +125,20 @@ tweet_counts_by_week_day <- tweets %>%
   arrange(university, day)
 
 # Plot the number of tweets by university and day of the week
-ggplot(tweet_counts_by_week_day, aes(
-  x = day,
-  y = n, color = university,
-  group = university
-)) +
+ggplot(
+  tweet_counts_by_week_day,
+  aes(
+    x = day, y = n,
+    color = university,
+    group = university
+  )
+) +
   geom_line() +
   facet_wrap(~university) +
   labs(
     title = "Number of tweets by university and day of the week",
-    x = "Day of the week", y = "Number of tweets"
+    x = "Day of the week",
+    y = "Number of tweets"
   )
 
 # Show most active days for each university
@@ -148,13 +168,13 @@ summary(tweets$time_interval)
 
 # setwd("../4.Text-Mining-Groupwork/plots")
 unique_years <- tweets$year %>% unique()
-# Plot distribution of time intervals between tweets for each year
+# Pilot distribution of time intervals between tweets for each year
 for (curr_year in unique_years) {
   # Filter data for the specific year
   filtered_data <- tweets %>%
     filter(year(created_at) == curr_year)
 
-  p <- ggplot(filtered_data, aes(x = time_interval)) +
+  print(ggplot(filtered_data, aes(x = time_interval)) +
     geom_histogram(fill = "lightblue") +
     facet_wrap(~university) +
     labs(
@@ -163,13 +183,23 @@ for (curr_year in unique_years) {
       ),
       x = "Time interval (minutes)",
       y = "Tweet count"
-    )
-  print(p)
+    ))
   universities <- filtered_data$university %>% unique()
   for (uni in universities) {
     # Filter data for the specific university
     uni_filtered_data <- filtered_data %>%
       filter(university == uni)
+
+    print(ggplot(uni_filtered_data, aes(x = time_interval)) +
+      geom_histogram(fill = "lightblue") +
+      labs(
+        title = paste0(
+          "Distribution of time intervals between tweets for ", uni,
+          " in ", curr_year
+        ),
+        x = "Time interval (minutes)",
+        y = "Tweet count"
+      ))
     # Calculate mode (most common interval) in hours
     most_common_interval_minutes <- find_mode(uni_filtered_data$time_interval)
     most_common_interval_hours <- most_common_interval_minutes / 60
@@ -182,103 +212,142 @@ for (curr_year in unique_years) {
     ))
   }
 }
-
-# TODO: Save plots by uni and year
 ```
-
 ## 2. What are the tweets about and how do other Twitter users react to them (likes, etc.)?
 
-### Load the data and make previous changes undone
-```{r}
-getwd()
-# setwd("../../data/")
-# load("Tweets_all.rda")
-```
 ### Data Preprocessing
 ```{r}
-# Convert Emojis to Text
-# TODO: Use for wordcloud?
-tweets$full_text_with_emojis <- tweets$full_text %>%
-  map_chr(~ replace_emoji(.x))
-# Removes: URLS, Emojis, Punctuation, Numbers
-tokens <- tokens(tweets$full_text,
-  remove_punct = TRUE,
-  remove_symbols = TRUE,
-  remove_numbers = TRUE,
-  remove_url = TRUE,
-  remove_separators = TRUE
-)
+langs <- c("de", "fr", "it", "en")
+tweets_filtered <- tweets %>%
+  filter(lang %in% langs)
+# Define extended stopwords (outside loop for efficiency)
 # Remove 'amp' as it is not meaningful because its only & symbol
 # Remove 'rt' because it is an word e.g 'engagiert'.
-# TODO: Check if languages are correct
 extended_stopwords <- c(
-  stopwords("en"),
-  stopwords("fr"),
-  stopwords("de"),
-  stopwords("it"),
-  "#fhnw", "#bfh", "@htw_chur", "#hslu", "#supsi",
-  "amp", "rt"
+  "#fhnw", "#bfh", "@htw_chur", "#hslu", "#supsi", "#sups",
+  "amp", "rt", "fr", "ber"
 )
-# transform to lowercase
-tokens <- tokens_tolower(tokens)
-# Stem all words
-tokens <- tokens_wordstem(tokens)
-# Create n-grams of any length (including bigrams and trigrams)
-tokens <- tokens_ngrams(tokens, n = 1)
-# remove stopwords im multiple languages and remove university hashtags
-tokens <- quanteda::tokens_select(tokens,
-  pattern = extended_stopwords,
-  selection = "remove"
-)
-# Create Document-feature-matrix
-doc_matrix <- dfm(tokens)
+# Create separate DFMs for each language
+dfm_list <- list()
+for (sel_lang in langs) {
+  # Subset tweets for the current language
+  tweets_lang <- tweets_filtered %>%
+    filter(lang == sel_lang)
+  # Create tokens for the current language
+  stopwords_lang <- stopwords(sel_lang)
+  # Create tokens for all tweets:
+  # - create corpus and tokens because tokensonly works on character, corpus, list, tokens, tokens_xptr objects.
+  # - create tokens and remove: URLS, Punctuation, Numbers, Symbols, Separators
+  # - transform to lowercase
+  # - Stem all words
+  # - Create n-grams of any length (not includinf bigrams and trigrams but they are shown later)
+  # - It is important to remove the stopwords after stemming the words because we remove the endings from some stem words
+  tokens_lang <- tweets_lang %>%
+    corpus(text_field = "full_text_emojis") %>%
+    tokens(
+      remove_punct = TRUE, remove_symbols = TRUE, remove_numbers = TRUE,
+      remove_url = TRUE, remove_separators = TRUE
+    ) %>%
+    tokens_tolower() %>%
+    tokens_wordstem(lang = sel_lang) %>%
+    tokens_ngrams(n = 1) %>%
+    tokens_select(
+      pattern =
+        c(stopwords_lang, extended_stopwords), selection = "remove"
+    )
+  # Create DFM for the current language
+  dfm_list[[sel_lang]] <- dfm(tokens_lang)
+}
 ```
 ### Content Analysis
+- Hslu has much english tweets
+- BFH and FHNW has much german tweets
+- Supsi have much italian tweets, the most common words are in italian
+- hes-so have much french tweets, the most common words are in french
 ```{r}
-# Word Frequencies
-word_freqs <- doc_matrix %>%
-  colSums() %>%
-  sort(decreasing = TRUE)
+# Word Frequencies & Visualization
+words_freqs_en <- sort(colSums(dfm_list$en), decreasing = TRUE)
+head(words_freqs_en, 20)
+wordcloud2(data.frame(
+  word = names(words_freqs_en),
+  freq = words_freqs_en
+), size = 0.5)
 
-# Top 20 words
-head(word_freqs, 20)
+words_freqs_de <- sort(colSums(dfm_list$de), decreasing = TRUE)
+head(words_freqs_de, 20)
+wordcloud2(data.frame(
+  word = names(words_freqs_de),
+  freq = words_freqs_de
+), size = 0.5)
 
-word_freqs_df <- data.frame(
-  word = featnames(doc_matrix),
-  freq = colSums(doc_matrix)
-)
+word_freqs_it <- sort(colSums(dfm_list$it), decreasing = TRUE)
+head(word_freqs_it, 20)
+wordcloud2(data.frame(
+  word = names(word_freqs_it),
+  freq = word_freqs_it
+), size = 0.5)
+# It seems that there are some english words but I think this are emojis
+word_freqs_fr <- sort(colSums(dfm_list$fr), decreasing = TRUE)
+head(word_freqs_fr, 20)
+wordcloud2(data.frame(
+  word = names(word_freqs_fr),
+  freq = word_freqs_fr
+), size = 0.5)
+# University-specific Analysis
+for (uni in unique(tweets$university)) {
+  # Subset tweets for the current language
+  uni_tweets <- tweets_filtered %>%
+    filter(university == uni)
 
-# Create the word cloud
-set.seed(123)
-wordcloud(
-  words = word_freqs_df$word,
-  freq = word_freqs_df$freq,
-  min.freq = 5,
-  max.words = 100,
-  random.order = FALSE,
-  rot.per = 0.35,
-  colors = brewer.pal(8, "Dark2")
-)
-
-# TODO: Wordcloud per University
+  tokens_lang <- uni_tweets %>%
+    corpus(text_field = "full_text_emojis") %>%
+    tokens(
+      remove_punct = TRUE, remove_symbols = TRUE, remove_numbers = TRUE,
+      remove_url = TRUE, remove_separators = TRUE
+    ) %>%
+    tokens_tolower() %>%
+    tokens_wordstem() %>%
+    tokens_ngrams(n = 1) %>%
+    tokens_select(
+      pattern =
+        c(
+          stopwords("en"), stopwords("de"),
+          stopwords("fr"), stopwords("it"), extended_stopwords
+        ), selection = "remove"
+    )
+  # Create Data Frame Matrix for uni with all languages
+  uni_dfm <- dfm(tokens_lang)
+  # Word Frequencies
+  uni_word_freqs <- sort(colSums(uni_dfm), decreasing = TRUE)
+  # print most common words: the emoji right are used often
+  head(uni_word_freqs, 20)
+  wordcloud2(data.frame(
+    word = names(uni_word_freqs),
+    freq = uni_word_freqs
+  ), size = 0.5)
+}
 ```
 ### Userreaction Analysis
 ```{r}
-# TODO: Add retweet and other stuff
-# Identify the tweets with the most likes
-most_liked_tweets <- tweets %>%
-  arrange(desc(favorite_count)) %>%
-  head(1000)
+# Calculate a 'weighted engagement' metric
+tweets <- tweets %>%
+  mutate(
+    weighted_engagement = favorite_count * 1 + retweet_count * 2
+  )
 
-# Analyze the posting time of the most liked tweets
-most_liked_tweets_time <- most_liked_tweets %>%
+# Identify tweets with the highest weighted engagement
+most_engaged_tweets <- tweets %>%
+  arrange(desc(weighted_engagement)) %>%
+  head(1000) # Top 1000 for analysis
+
+# Analyze posting time of most engaged tweets (same as before)
+most_engaged_tweets_time <- most_engaged_tweets %>%
   mutate(time_of_day = format(created_at, "%H"))
 
-# Plot the distribution of the posting times
-ggplot(most_liked_tweets_time, aes(x = as.numeric(time_of_day))) +
+ggplot(most_engaged_tweets_time, aes(x = as.numeric(time_of_day))) +
   geom_histogram(binwidth = 1, fill = "lightblue", color = "blue") +
   labs(
-    title = "Distribution of Posting Times for Most Liked Tweets",
+    title = "Distribution of Posting Times for Most Engaged Tweets",
     x = "Hour of Day",
     y = "Frequency"
   )
@@ -286,96 +355,70 @@ ggplot(most_liked_tweets_time, aes(x = as.numeric(time_of_day))) +
 Analyse the content of the most liked tweets
 ```{r}
 # Preprocessing content of most liked tweets
-most_liked_tokens <- tokens(most_liked_tweets$full_text,
-  remove_punct = TRUE,
-  remove_symbols = TRUE,
-  remove_numbers = TRUE,
-  remove_url = TRUE,
-  remove_separators = TRUE
-)
-
-# Apply the same stopword removal and transformations
-
-most_liked_tokens <- tokens_tolower(most_liked_tokens)
-most_liked_tokens <- tokens_wordstem(most_liked_tokens)
-most_liked_tokens <- tokens_ngrams(most_liked_tokens, n = 1:3)
-most_liked_tokens <- tokens_select(most_liked_tokens,
-  pattern = extended_stopwords, selection = "remove"
-)
-most_liked_doc_matrix <- dfm(most_liked_tokens)
-
-# Word Frequencies of Most Liked Tweets
-most_liked_word_freqs <- most_liked_doc_matrix %>%
-  colSums() %>%
-  sort(decreasing = TRUE)
-
-# Create a word cloud for most liked tweets
-most_liked_word_freqs_df <- data.frame(
-  word = featnames(most_liked_doc_matrix),
-  freq = colSums(most_liked_doc_matrix)
-)
-
+tokens_most_engaged <- most_engaged_tweets %>%
+  corpus(text_field = "full_text_emojis") %>%
+  tokens(
+    remove_punct = TRUE, remove_symbols = TRUE, remove_numbers = TRUE,
+    remove_url = TRUE, remove_separators = TRUE
+  ) %>%
+  tokens_tolower() %>%
+  tokens_wordstem(lang = sel_lang) %>%
+  tokens_ngrams(n = 1) %>%
+  tokens_select(
+    pattern =
+      c(
+        stopwords("en"), stopwords("de"),
+        stopwords("fr"), stopwords("it"), extended_stopwords
+      ), selection = "remove"
+  )
+tokens_most_engaged_dfm <- dfm(tokens_most_engaged)
+freqs_most_engaged <- sort(colSums(tokens_most_engaged_dfm), decreasing = TRUE)
+# print most common words: the emoji right are used often
+head(freqs_most_engaged, 20)
 set.seed(123)
-wordcloud(
-  words = most_liked_word_freqs_df$word,
-  freq = most_liked_word_freqs_df$freq,
-  min.freq = 2,
-  max.words = 100,
-  random.order = FALSE,
-  rot.per = 0.35,
-  colors = brewer.pal(8, "Dark2")
-)
-# TODO: Per university
+wordcloud2(data.frame(
+  word = names(freqs_most_engaged),
+  freq = freqs_most_engaged
+), size = 0.5)
 ```
 ## Question 3: How do the university tweets differ in terms of content, style, emotions, etc?
 
 ### Content Analysis (Word Clouds)
 ```{r}
 for (uni in unique(tweets$university)) {
-  # Filter tweets by university
   uni_tweets <- tweets %>%
-    filter(university == uni)
-
-  uni_tokens <- tokens(uni_tweets$full_text,
-    remove_punct = TRUE,
-    remove_symbols = TRUE,
-    remove_numbers = TRUE,
-    remove_url = TRUE,
-    remove_separators = TRUE
-  )
-  # transform to lowercase
-  uni_tokens <- tokens_tolower(uni_tokens)
-  # Stem all words
-  uni_tokens <- tokens_wordstem(uni_tokens)
-  # Create n-grams of any length (including bigrams and trigrams)
-  uni_tokens <- tokens_ngrams(uni_tokens, n = 1)
-
-  uni_tokens <- tokens_select(uni_tokens,
-    pattern = extended_stopwords, selection = "remove"
-  )
-  uni_dfm <- dfm(uni_tokens)
-
-  uni_word_freqs_df <- data.frame(
-    word = featnames(uni_dfm),
-    freq = colSums(uni_dfm)
-  )
-
-  # Create the word cloud
+    filter(university == uni, lang %in% langs)
+  tokens_uni <- uni_tweets %>%
+    corpus(text_field = "full_text_emojis") %>%
+    tokens(
+      remove_punct = TRUE, remove_symbols = TRUE, remove_numbers = TRUE,
+      remove_url = TRUE, remove_separators = TRUE
+    ) %>%
+    tokens_tolower() %>%
+    tokens_wordstem() %>%
+    tokens_ngrams(n = 1) %>%
+    tokens_select(
+      pattern =
+        c(
+          stopwords("en"), stopwords("de"),
+          stopwords("fr"), stopwords("it"), extended_stopwords
+        ), selection = "remove"
+    )
+  uni_dfm <- dfm(tokens_uni)
+  freqs_uni <- sort(colSums(uni_dfm), decreasing = TRUE)
+  # print most common words: the emoji right are used often
+  head(freqs_uni, 20)
   set.seed(123)
-  wordcloud(
-    words = uni_word_freqs_df$word,
-    freq = uni_word_freqs_df$freq,
-    min.freq = 5,
-    max.words = 100,
-    random.order = FALSE,
-    rot.per = 0.35,
-    colors = brewer.pal(8, "Dark2")
-  )
-  # TODO: Save wordcloud
+  wordcloud2(data.frame(
+    word = names(freqs_uni),
+    freq = freqs_uni
+  ), size = 0.5)
 
   # Analyze Top Emojis by University
   emoji_count_per_university <- uni_tweets %>%
     top_n_emojis(full_text)
+
+  print(emoji_count_per_university)
 
   emoji_count_per_university %>%
     mutate(emoji_name = reorder(emoji_name, n)) %>%
@@ -383,69 +426,64 @@ for (uni in unique(tweets$university)) {
     geom_col() +
     labs(x = "Count", y = NULL, title = "Top 20 Emojis Used")
 }
-
+# Generate general tokens for bigram and trigram analysis
+tokens <- tweets %>%
+  corpus(text_field = "full_text_emojis") %>%
+  tokens(
+    remove_punct = TRUE, remove_symbols = TRUE, remove_numbers = TRUE,
+    remove_url = TRUE, remove_separators = TRUE
+  ) %>%
+  tokens_tolower() %>%
+  tokens_wordstem() %>%
+  tokens_select(
+    pattern =
+      c(
+        stopwords("en"), stopwords("de"),
+        stopwords("fr"), stopwords("it"), extended_stopwords
+      ), selection = "remove"
+  )
+# Bigram Wordcloud
 bi_gram_tokens <- tokens_ngrams(tokens, n = 2)
-bi_gram_matrix <- dfm(bi_gram_tokens)
-
-bi_gram_freqs_df <- data.frame(
-  word = featnames(bi_gram_matrix),
-  freq = colSums(bi_gram_matrix)
-)
-
+dfm_bi_gram <- dfm(bi_gram_tokens)
+freqs_bi_gram <- sort(colSums(dfm_bi_gram), decreasing = TRUE)
+head(freqs_bi_gram, 20)
 # Create the bigram word cloud
-set.seed(123) # For reproducibility
-wordcloud(
-  words = bi_gram_freqs_df$word,
-  freq = bi_gram_freqs_df$freq,
-  min.freq = 3,
-  max.words = 100,
-  random.order = FALSE,
-  rot.per = 0.35,
-  colors = brewer.pal(8, "Accent")
-)
+set.seed(123)
+wordcloud2(data.frame(
+  word = names(freqs_bi_gram),
+  freq = freqs_bi_gram
+), size = 0.5)
 
 # Trigram Wordcloud
 tri_gram_tokens <- tokens_ngrams(tokens, n = 3)
-tri_gram_matrix <- dfm(tri_gram_tokens)
-
-tri_gram_freqs_df <- data.frame(
-  word = featnames(tri_gram_matrix),
-  freq = colSums(tri_gram_matrix)
-)
-
-# Create the trigram word cloud
-set.seed(123) # For reproducibility
-wordcloud(
-  words = tri_gram_freqs_df$word,
-  freq = tri_gram_freqs_df$freq,
-  min.freq = 2,
-  max.words = 100,
-  random.order = FALSE,
-  rot.per = 0,
-  colors = brewer.pal(8, "Paired")
-)
+dfm_tri_gram <- dfm(tri_gram_tokens)
+reqs_tri_gram <- sort(colSums(dfm_tri_gram), decreasing = TRUE)
+head(reqs_tri_gram, 20)
+# Create the bigram word cloud
+set.seed(123)
+wordcloud2(data.frame(
+  word = names(reqs_tri_gram),
+  freq = reqs_tri_gram
+), size = 0.5)
 ```
 ### LDA Topic Modeling
 ```{r}
-# TODO: Check why doc_matrix takes forever and doc_matrix does not work
-tweet_lda <- LDA(word_freqs, k = 5, control = list(seed = 123))
+# Source: Christoph Zangger -> löscht alle Reihen mit nur 0s
+new_dfm <- dfm_subset(dfm_list$de, ntoken(dfm_list$de) > 0)
+tweet_lda <- LDA(new_dfm, k = 5, control = list(seed = 123))
 # Tidy the LDA results
 topic_terms <- tidy(tweet_lda, matrix = "beta")
 # Extract topics and top terms
 topics <- as.data.frame(terms(tweet_lda, 50)) # First fifty words per topic
 
-# Tidy the LDA results
-tweet_lda_td <- tidy(tweet_lda)
-
 # Extract top terms per topic
-top_terms <- tweet_lda_td %>%
+top_terms <- topic_terms %>%
   group_by(topic) %>%
   top_n(8, beta) %>% # Show top 8 terms per topic
   ungroup() %>%
   arrange(topic, -beta)
 
 # Visualize top terms per topic
-# TODO: not working until end of LDA
 top_terms %>%
   mutate(term = reorder_within(term, beta, topic)) %>%
   ggplot(aes(beta, term, fill = factor(topic))) +
@@ -459,7 +497,7 @@ top_terms %>%
   )
 
 # Most different words among topics (using log ratios)
-diff <- tweet_lda_td %>%
+diff <- topic_terms %>%
   mutate(topic = paste0("topic", topic)) %>%
   spread(topic, beta) %>%
   filter(topic1 > .001 | topic2 > .001 | topic3 > .001) %>%
@@ -470,22 +508,58 @@ diff <- tweet_lda_td %>%
   )
 diff
 
-# Add topic probabilities to original data
-lda_gamma <- tidy(tweet_lda, matrix = "gamma")
-tweets <- tweets %>%
-  mutate(document_id = row_number()) %>% # Add a unique ID for each tweet
-  left_join(lda_gamma, by = c("document_id" = "document"))
+# LDA Topic Modeling for each university
+universities <- unique(tweets$university)
 
-# Analyze topics by university
-tweets %>%
-  count(university, topic, wt = gamma) %>%
-  group_by(university) %>%
-  slice_max(n = 3, order_by = n, with_ties = FALSE) %>%
-  ungroup() %>%
-  mutate(topic = paste0("Topic ", topic)) %>%
-  ggplot(aes(x = university, y = n, fill = topic)) +
-  geom_col(position = "dodge") +
-  labs(title = "Top 3 Topics by University", y = "Topic Proportion")
+for (uni in universities) {
+  # Filter tweets for the current university
+  uni_tweets <- tweets %>% filter(university == uni)
+
+  tokens_uni <- uni_tweets %>%
+    corpus(text_field = "full_text_emojis") %>%
+    tokens(
+      remove_punct = TRUE, remove_symbols = TRUE, remove_numbers = TRUE,
+      remove_url = TRUE, remove_separators = TRUE
+    ) %>%
+    tokens_tolower() %>%
+    tokens_wordstem() %>%
+    tokens_ngrams(n = 1) %>%
+    tokens_select(
+      pattern =
+        c(
+          stopwords("en"), stopwords("de"),
+          stopwords("fr"), stopwords("it"), extended_stopwords
+        ), selection = "remove"
+    )
+  uni_dfm <- dfm(tokens_uni)
+  # Apply LDA
+  uni_dfm <- dfm_subset(uni_dfm, ntoken(uni_dfm) > 0)
+  tweet_lda <- LDA(uni_dfm, k = 5, control = list(seed = 123))
+  # Tidy the LDA results
+  tweet_lda_td <- tidy(tweet_lda)
+  # Extract top terms per topic
+  top_terms <- tweet_lda_td %>%
+    group_by(topic) %>%
+    top_n(8, beta) %>%
+    ungroup() %>%
+    arrange(topic, -beta)
+  # Visualize top terms per topic
+  p <- top_terms %>%
+    mutate(term = reorder_within(term, beta, topic)) %>%
+    ggplot(aes(beta, term, fill = factor(topic))) +
+    geom_col(show.legend = FALSE) +
+    facet_wrap(~topic, scales = "free") +
+    scale_y_reordered() +
+    labs(
+      x = "Beta (Term Importance within Topic)",
+      y = NULL,
+      title = paste("Top Terms per Topic in Tweets from", uni, "(LDA)")
+    )
+  print(p)
+  # Topic Model Summary: top 10 terms per topic
+  cat("\nTopic Model Summary for", uni, ":\n")
+  print(as.data.frame(terms(tweet_lda, 10)))
+}
 ```
 ### Style Analysis
 ```{r}
@@ -501,7 +575,7 @@ tweets %>%
 langs <- c("de", "fr", "it", "en")
 
 tweets_filtered <- tweets %>%
-  filter(language %in% langs)
+  filter(lang %in% langs)
 
 # Create Function to Get Syuzhet Sentiment
 get_syuzhet_sentiment <- function(text, lang) {
@@ -517,8 +591,6 @@ get_syuzhet_sentiment <- function(text, lang) {
 tweets_filtered$sentiment <-
   mapply(get_syuzhet_sentiment, tweets_filtered$full_text, tweets_filtered$lang)
 
-# Sentiment over Time
-tweets_filtered$month <- floor_date(tweets_filtered$created_at, "month")
 
 plot_data <- tweets_filtered %>%
   group_by(university, month) %>%
@@ -538,7 +610,6 @@ ggplot(plot_data, aes(
   scale_x_datetime(date_breaks = "1 month", date_labels = "%Y-%m") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-# TODO: Check sentiment and use syuzhet
 for (uni in unique(tweets$university)) {
   uni_tweets <- tweets %>%
     filter(university == uni, lang %in% langs)
@@ -546,9 +617,6 @@ for (uni in unique(tweets$university)) {
   uni_tweets$sentiment <-
     mapply(get_syuzhet_sentiment, uni_tweets$full_text, uni_tweets$lang)
 
-  # Sentiment Over Time (Per University)
-  uni_tweets$month <- floor_date(uni_tweets$created_at, "month")
-  uni_tweets$year <- year(uni_tweets$month)
 
   plot_data <- uni_tweets %>%
     group_by(year, month) %>%
@@ -565,43 +633,45 @@ for (uni in unique(tweets$university)) {
     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
     facet_wrap(~year, scales = "free_x"))
 
-  uni_tweets <- tweets %>%
-    filter(university == uni, language %in% langs)
-
+  # Did not found a way to get the sentiment from the tweets for each language so I will use the full_text_emojis column and detect the language of the words only in german
+  uni_tweets <- uni_tweets %>%
+    filter(lang == "de")
   # Tokenize and Preprocess Words
   uni_words <- uni_tweets %>%
-    unnest_tokens(word, full_text) %>%
-    anti_join(stop_words) # remove Stopwords
+    unnest_tokens(word, full_text_emojis) %>%
+    anti_join(get_stopwords(language = "de")) %>%
+    distinct() %>% # remove duplicated words
+    filter(nchar(word) > 3) %>% # remove words with less than 4 characters
+    filter(!str_detect(word, "\\d")) # remove numbers
 
-  # Join Sentiment with Words
+  # Join Sentiment with Words (language specific)
   sentiment_words <- uni_words %>%
-    inner_join(get_sentiments("bing"), by = "word")
+    mutate(
+      sentiment = get_sentiment(word, method = "syuzhet", lang = "de")
+    )
 
   # Separate Positive and Negative Words
   positive_words <- sentiment_words %>%
-    filter(sentiment == "positive") %>%
-    count(word, sort = TRUE)
+    filter(sentiment >= 0) %>%
+    count(word, sort = TRUE) %>%
+    rename(freq = n) # Rename 'n' to 'freq'
 
   negative_words <- sentiment_words %>%
-    filter(sentiment == "negative") %>%
-    count(word, sort = TRUE)
+    filter(sentiment < 0) %>%
+    count(word, sort = TRUE) %>%
+    rename(freq = n) # Rename 'n' to 'freq'
 
   # Create and Display Word Clouds
-  par(mfrow = c(1, 2)) # Set up side-by-side plots
-
-  wordcloud(
-    words = positive_words$word, freq = positive_words$n,
-    scale = c(3, 0.5), max.words = 100, random.order = FALSE,
-    rot.per = 0.35, colors = brewer.pal(8, "Greens")
-  )
-  title(main = paste("Positive Words for", uni), line = 2)
-
-  wordcloud(
-    words = negative_words$word, freq = negative_words$n,
-    scale = c(3, 0.5), max.words = 100, random.order = FALSE,
-    rot.per = 0.35, colors = brewer.pal(8, "Reds")
-  )
-  title(main = paste("Negative Words for", uni), line = 2)
+  # positive words
+  wordcloud2(data.frame(
+    word = positive_words$word,
+    freq = positive_words$freq
+  ), size = 0.5)
+  # negative words
+  wordcloud2(data.frame(
+    word = negative_words$word,
+    freq = negative_words$freq
+  ), size = 0.5)
 }
 ```
 
@@ -627,9 +697,8 @@ emoji_count %>%
 insights <- list(
   "Most Active Hours" = hours_with_most_tweets_by_uni,
   "Most Active Days" = days_with_most_tweets_by_uni,
-  "Most Common Time Intervals" = most_common_interval_minutes,
-  "Content Analysis" = head(word_freqs),
-  "Sentiment Analysis" = tweet_sentiment
+  "Content Analysis" = head(words_freqs_de),
+  "Sentiment Analysis" = head(tweets_filtered$sentiment)
 )
 ```
 # Recommendations:

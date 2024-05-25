@@ -1,0 +1,440 @@
+---
+title: "Task 1: Wage Prediction Model: Data Exploration, Model Selection, and Prediction"
+author: "Fabio Burri, Mischa Haenen, Robin Galeazzi, and Timon Galeazzi"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+## Data Exploration and Preparation: Analyze the features in your dataset to select relevant predictors for the wage.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(dplyr)
+library(caret)
+library(rsample)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(readr)
+library(gbm)
+library(Metrics)
+library(ggplot2)
+library(pROC)
+library(ROCR)
+library(dlookr)
+library(finalfit)
+library(h2o)
+library(data.table)
+library(writexl)
+library(xgboost)
+```
+
+```{r}
+# Load the dataset
+load("data_wage.RData")
+
+# Handle missing values by removing rows with NAs
+data_wage <- na.omit(data)
+```
+
+Then our idea was to get a quick overview of the dataset. Which dimensions does the dataset have? Which variable types are used?
+
+```{r}
+# Display dataset dimensions and basic structure
+dim(data_wage)
+summary(data_wage)
+head(data_wage, 1)
+hist(data_wage$wage, breaks = 30, main = "Distribution of Wages", xlab = "Wage")
+```
+
+We have 10'711 observations with 78 variables like gender, age, country, education, ecetera. We were then interested in getting a visual overview of the most important data and the percentages.
+
+Our aim was then to find the dependent variable (Y), in this case 'wage'.
+
+```{r}
+# Analyze the dependent variable 'wage'
+summary(data_wage$wage)
+```
+
+We can see that the average salary is over 52,300 dollars. As the average wage is heavily distorted by high salaries - the maximum is 551,600 dollars - the median of just over 34,500 dollars is more meaningful. Because the minimum value is zero, we were interested to see how many people stated 0 as their salary (e.g. students).
+
+```{r create subset nozero_wage, echo=FALSE, message=FALSE, warning=FALSE}
+# Count number of observations with zero wage
+zero_count <- sum(data_wage$wage == 0)
+cat("Number of observations with zero wage:", zero_count, "\n")
+
+# Create a dataset without zero wages
+nonzero_wage <- data_wage %>% filter(wage > 0)
+```
+
+This amounted to a total of 1000 people. we then created another dataset without the people who entered 0 in the wage. The average value is 57,700 dollars, the median is 43,100 dollars.Additionally, we would like to show the distribution of wages graphically.
+
+```{r vizualising wage distribution, echo=FALSE, message=FALSE, warning=FALSE}
+# Boxplot and histogram for wage distribution
+boxplot(data_wage$wage,
+  main = "Distribution of Wages", ylab = "Wage", col = "green",
+  notch = TRUE,
+  outline = FALSE
+)
+abline(h = mean(data_wage$wage), col = "red", lwd = 2, lty = 2)
+
+data_wage %>%
+  ggplot(aes(x = wage)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+  labs(title = "Distribution of Wages", x = "Wage", y = "Frequency")
+
+boxplot(nonzero_wage$wage,
+  main = "Distribution of Wages (without wage 0)",
+  ylab = "Wage", col = "blue",
+  notch = TRUE,
+  outline = FALSE
+)
+abline(h = mean(data_wage$wage), col = "red", lwd = 2, lty = 2)
+
+nonzero_wage %>%
+  ggplot(aes(x = wage)) +
+  geom_histogram(bins = 30, fill = "lightgreen", color = "black") +
+  labs(
+    title = "Distribution of Wages (without zero wages)",
+    x = "Wage", y = "Frequency"
+  )
+```
+
+It was relevant for us to work with the complete data (including all upward outliers). On the other hand, we also work with the answers that have a salary of 0. We believe that not to earn any money is also relevant for our statistics. These could be people who are looking for a job or students. This is also part of a prediction model for future salaries.
+
+We will then analyze the categorical and numerical values separately. By looking at the data we found out, that only "wage" is a numeric variable. That's why we then focused on the most important data besides the wage: gender, age, experience, country, and education.
+
+```{r categorial variables, echo=FALSE, message=FALSE, warning=FALSE}
+# Convert experience into an ordered factor and remove original column
+data_wage <- data_wage %>%
+  mutate(
+    experience = factor(
+      years_experience,
+      levels = c(
+        "0-1", "1-2", "2-3", "3-4", "4-5", "5-11",
+        "11-15", "15-20", "20-25", "25-30", "30 +"
+      ),
+      ordered = TRUE
+    )
+  ) %>%
+  select(-years_experience)
+
+# Visualize distribution of categorical variables
+categorical_vars <- c("gender", "age", "country", "education")
+for (var in categorical_vars) {
+  data_wage %>%
+    ggplot(aes(x = factor(!!sym(var)))) +
+    geom_bar(fill = "steelblue") +
+    labs(title = paste("Distribution of", var), x = var, y = "Frequency") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
+```
+After these analyses, we concentrated on the top earners. In other words, we looked for the top 5% of earners.
+```{r top earners, echo=FALSE, message=FALSE, warning=FALSE}
+# Analyze top 5% earners
+top_earners <- data_wage %>%
+  filter(wage >= quantile(wage, 0.95, na.rm = TRUE))
+
+# Summarize top earners' characteristics
+dim(top_earners)
+summary(top_earners$gender)
+summary(top_earners$age)
+summary(top_earners$experience)
+summary(top_earners$country)
+summary(top_earners$education)
+```
+We see that the top 5% of the highest earners include a total of 536 people) 491 men and 38 women. The analysis of the top 5% shows that people between the ages of 30 and 34 earn the most. In terms of experience, it is people with between 5 and 11 years of work experience who earn the most. 380 of the people come from the USA, which is no surprise in this case, as most of the respondents come from the USA. However, it is interesting to note that 255 of the 536 people have a master's degree, while only 160 have a doctorate.
+
+Then our goal was to scale numeric data to ensure that features have a similar range of values. After that our goal was to convert categorical variables into a format suitable for modeling.
+
+```{r }
+# One-hot encode categorical variables and scale numeric variables
+data_encoded <- data_wage %>%
+  mutate(across(where(is.character), factor)) %>%
+  mutate(across(where(is.numeric), scale)) %>%
+  mutate(across(where(is.factor), ~ as.numeric(as.factor(.x)) - 1))
+
+# Apply dummy variable encoding
+dummies <- dummyVars(" ~ .", data = data_encoded)
+data_transformed <- as.data.frame(predict(dummies, newdata = data_encoded))
+# Add the target variable back to the transformed data
+data_transformed$wage <- data_wage$wage
+```
+
+Now it is time to decide which variables (characteristics) to include in the model, based on their potential relationship to the target variable "wage".
+
+## Model Selection and Training:
+
+In this chapter we have trained different models (linear regression, regression tree, random forest) in order to find the best performing one. The models were trained with the data set data_transformed.
+
+```{r}
+# Split data into training and testing sets
+set.seed(123)
+split <- initial_split(data_transformed, prop = 0.7)
+train_data <- training(split)
+test_data <- testing(split)
+
+# Helper function for model training and evaluation
+train_and_evaluate_model <- function(model_type, data) {
+  set.seed(123)
+  train_control <- trainControl(method = "cv", number = 5)
+
+  if (model_type == "xgbTree") {
+    model <- train(
+      x = as.matrix(data[, -ncol(data)]),
+      y = data$wage,
+      method = model_type,
+      trControl = train_control,
+      tuneLength = 3
+    )
+  } else {
+    model <- train(
+      wage ~ .,
+      data = data,
+      method = model_type,
+      trControl = train_control
+    )
+  }
+  return(model)
+}
+
+# Train models
+lm_model <- train_and_evaluate_model("lm", train_data)
+rf_model <- randomForest(
+  wage ~ .,
+  data = train_data, ntree = 50, mtry = 3, importance = TRUE, cp = 0
+)
+gbm_model <- train_and_evaluate_model("gbm", train_data)
+xgboost_model <- train_and_evaluate_model("xgbTree", train_data)
+
+# Hyperparameter tuning using Grid Search and Random Search
+set.seed(123)
+
+# Grid search for Random Forest
+rf_grid <- expand.grid(mtry = c(2, 3, 4))
+rf_control <- trainControl(method = "cv", number = 5, search = "grid")
+rf_tuned <- train(
+  wage ~ .,
+  data = train_data, method = "rf",
+  trControl = rf_control, tuneGrid = rf_grid
+)
+
+# Random search for GBM
+gbm_grid <- expand.grid(
+  n.trees = c(100, 150, 200),
+  interaction.depth = c(1, 3, 5),
+  shrinkage = c(0.01, 0.1),
+  n.minobsinnode = 10
+)
+gbm_control <- trainControl(method = "cv", number = 5, search = "random")
+gbm_tuned <- train(
+  wage ~ .,
+  data = train_data, method = "gbm",
+  trControl = gbm_control, tuneGrid = gbm_grid, verbose = FALSE
+)
+```
+
+## Model Evaluation
+
+Following the training of the models we evaluate here which modes is the best performing. We will asses this using the metric RMSE.
+
+```{r}
+# Compare models using RMSE
+model_list <- list(
+  "Linear Regression" = lm_model,
+  "Random Forest" = rf_model, "Gradient Boosting" = gbm_model,
+  "XGBoost" = xgboost_model
+)
+
+# Make predictions on the test data
+predictions_lm <- predict(lm_model, newdata = test_data)
+predictions_rf <- predict(rf_model, newdata = test_data)
+predictions_gbm <- predict(gbm_model, newdata = test_data)
+predictions_xgboost <- predict(xgboost_model, newdata = test_data)
+
+# Calculate RMSE values
+rmse_lm <- RMSE(predictions_lm, test_data$wage)
+rmse_rf <- RMSE(predictions_rf, test_data$wage)
+rmse_gbm <- RMSE(predictions_gbm, test_data$wage)
+rmse_xgboost <- RMSE(predictions_xgboost, test_data$wage)
+
+# Print RMSE values
+cat("RMSE (Linear Regression):", rmse_lm, "\n")
+cat("RMSE (Random Forest):", rmse_rf, "\n")
+cat("RMSE (Gradient Boosting):", rmse_gbm, "\n")
+cat("RMSE (XGBoost):", rmse_xgboost, "\n")
+
+# Additional metrics
+mae_lm <- MAE(predictions_lm, test_data$wage)
+mae_rf <- MAE(predictions_rf, test_data$wage)
+mae_gbm <- MAE(predictions_gbm, test_data$wage)
+mae_xgboost <- MAE(predictions_xgboost, test_data$wage)
+
+r2_lm <- R2(predictions_lm, test_data$wage)
+r2_rf <- R2(predictions_rf, test_data$wage)
+r2_gbm <- R2(predictions_gbm, test_data$wage)
+r2_xgboost <- R2(predictions_xgboost, test_data$wage)
+
+# Print additional metrics
+cat("MAE (Linear Regression):", mae_lm, "\n")
+cat("MAE (Random Forest):", mae_rf, "\n")
+cat("MAE (Gradient Boosting):", mae_gbm, "\n")
+cat("MAE (XGBoost):", mae_xgboost, "\n")
+cat("R-squared (Linear Regression):", r2_lm, "\n")
+cat("R-squared (Random Forest):", r2_rf, "\n")
+cat("R-squared (Gradient Boosting):", r2_gbm, "\n")
+cat("R-squared (XGBoost):", r2_xgboost, "\n")
+
+# Visual comparison of predicted vs. actual wages
+comparison <- data.frame(
+  Actual = test_data$wage,
+  LM_Predicted = predictions_lm,
+  RF_Predicted = predictions_rf,
+  GBM_Predicted = predictions_gbm,
+  XGBoost_Predicted = predictions_xgboost
+)
+
+ggplot(comparison, aes(x = Actual)) +
+  geom_point(aes(y = LM_Predicted, color = "Linear Regression")) +
+  geom_point(aes(y = RF_Predicted, color = "Random Forest")) +
+  geom_point(aes(y = GBM_Predicted, color = "Gradient Boosting")) +
+  geom_point(aes(y = XGBoost_Predicted, color = "XGBoost")) +
+  labs(title = "Predicted vs. Actual Wages", x = "Actual Wage", y = "Predicted Wage") +
+  theme_minimal()
+```
+# TODO: Adapt timon; And is RSME enough to explain? Maybe add more metrics
+As you can see here, Gradient Boosting is the best performing model with the lowest RMSE of 0.7060181 while the Linear Regression is the worst one with an RMSE of 0.79862. therefore we have chosen to use the Gradient Boosting model for our predictions. but before we get into this we define some variables which have the highest coefficients to get the most accurate prediction with as few variables as possible.
+
+## Model Explanation
+
+Here we aim to see which variables have the highest correlation with the variable wage.
+
+```{r}
+# Variable Importance Plot for Random Forest
+varImpPlot(rf_model)
+
+# Summary of Linear Regression Model
+summary(lm_model)
+
+# Summary of Gradient Boosting Model
+summary(gbm_model)
+
+# Summary of XGBoost Model
+summary(xgboost_model)
+```
+# TODO: Adapt timon
+For the gbm model we have the top performers country, age, job role, ML_atwork and more. but first we decided to try the prediction with different variables to see how accurate these predictions are if we do not use those variables suggested, or at least not all of them.
+
+## Wage Prediction:
+
+We have decided to use gender, age, country, education and experience.
+
+```{r}
+# Wage prediction for team members (invented data)
+set.seed(1234)
+team_data <- read_csv("./team_data.csv")
+
+# Add experience column
+team_data$experience <- factor(
+  team_data$years_experience,
+  levels = c(
+    "0-1", "1-2", "2-3", "3-4", "4-5", "5-11",
+    "11-15", "15-20", "20-25", "25-30", "30 +"
+  ),
+  ordered = TRUE
+)
+
+# One-hot encode categorical variables and scale numeric variables
+team_data_encoded <- team_data %>%
+  mutate(across(where(is.character), factor)) %>%
+  mutate(across(where(is.numeric), scale)) %>%
+  mutate(across(where(is.factor), ~ as.numeric(as.factor(.x)) - 1))
+
+# Apply dummy variable encoding
+team_data_transformed <- as.data.frame(
+  predict(dummies, newdata = team_data_encoded)
+)
+
+# Use the best-performing model from H2O AutoML for predictions
+pred_best_model <- as.data.frame(h2o.predict(best_model, as.h2o(team_data_transformed)))
+predicted_wages <- pred_best_model$predict
+print(predicted_wages)
+
+# Conclusion
+cat(
+  "The best-performing model was", best_model@model_id,
+  "with an RMSE of", rmse, ", MAE of", mae, ", and R-squared of", r2, ".\n"
+)
+
+cat("The main features driving wage predictions were:\n")
+print(var_imp)
+
+cat("Future improvements could include:")
+```
+TODO: Adapt timon
+We can see the predicted_wages for the team members. The best performing model was the MODELNAME model with an RMSE of XXXX. The main features driving wage predictions were country, age, job role, ML_atwork, and more. Future improvements could include: ...
+
+## H2O AutoML analysis
+
+```{r}
+# H2O AutoML Setup
+h2o.init()
+
+# Convert the dataset to H2O object
+h2o_data <- as.h2o(data_transformed)
+
+# Split dataset into training and validation sets
+splits <- h2o.splitFrame(h2o_data, ratios = c(0.8), seed = 12)
+train <- splits[[1]]
+valid <- splits[[2]]
+
+# Set the dependent variable
+dep_var <- "wage"
+
+# Run H2O AutoML
+automl <- h2o.automl(
+  x = setdiff(colnames(h2o_data), dep_var),
+  y = dep_var,
+  training_frame = train,
+  max_runtime_secs = 600,
+  seed = 12
+)
+
+# View leaderboard of models generated by AutoML
+lb <- automl@leaderboard
+print(lb, n = nrow(lb))
+
+# Export leaderboard to Excel
+lb_table <- as.data.table(lb)
+write_xlsx(lb_table, "./trained_ML_models.xlsx")
+
+# Find the best performing model per a certain criterion and explore it
+best_model <- h2o.get_best_model(automl, criterion = "rmse")
+best_model
+
+# Predictions and performance on the validation set
+pred_best_model <- h2o.predict(best_model, valid)
+perf_best_model <- h2o.performance(best_model, valid)
+
+# Summarize the performance
+rmse <- h2o.rmse(perf_best_model)
+mae <- h2o.mae(perf_best_model)
+r2 <- h2o.r2(perf_best_model)
+
+cat("RMSE (Stacked Ensemble):", rmse, "\n")
+cat("MAE (Stacked Ensemble):", mae, "\n")
+cat("R-squared (Stacked Ensemble):", r2, "\n")
+
+# Variable Importance for Stacked Ensemble Model
+var_imp <- h2o.varimp(best_model)
+print(var_imp)
+h2o.varimp_plot(best_model)
+
+# Conclusion and future work
+cat(
+  "The best-performing model was", best_model@model_id,
+  "with an RMSE of", rmse, ".\n"
+)
+cat("The main features driving wage predictions were: ")
+cat("Future improvements could include: ")
+```
