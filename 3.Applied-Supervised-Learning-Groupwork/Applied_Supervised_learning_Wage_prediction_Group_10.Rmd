@@ -293,6 +293,7 @@ comparison_long <- tidyr::pivot_longer(comparison,
 # Visual comparison
 ggplot(comparison_long, aes(x = Actual, y = Predicted, color = Model)) +
   geom_point() +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black") +
   labs(
     title = "Predicted vs. Actual Wages",
     x = "Actual Wage", y = "Predicted Wage"
