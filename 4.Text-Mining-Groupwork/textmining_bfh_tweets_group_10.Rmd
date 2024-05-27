@@ -85,9 +85,38 @@ tweets$emoji_unicode <- tweets %>%
 
 ## Question 1: How many tweets are being posted by the various Universities when? Are there any 'release' strategies visible?
 
-- **Most active hours**: Each university has a distinct peak hour for tweeting, often aligning with typical working hours (9 AM - 5 PM). This suggests a strategic approach to reach their target audience when they are most likely online.
-- **Most active days**:  There isn't a consistent "most active day" across universities. Some favor weekdays, while others show higher activity on weekends. This could reflect differences in their target audience or the nature of their content.
-- **Release strategies**: While there are peak hours and days, the time intervals between tweets vary significantly within each university. This indicates a less rigid release strategy and perhaps a more reactive approach to current events or trends.
+### Most Active Hours:
+Each university has a distinct peak hour for tweeting, often aligning with typical working hours (9 AM - 5 PM). This suggests a strategic approach to reach their target audience when they are most likely online. The most active hours for each university are as follows:
+
+- FHNW: 9 AM
+- FH Graubünden: 11 AM
+- ZHAW: 5 PM
+- BFH: 8 AM
+- HES-SO: 10 AM
+- HSLU: 9 AM
+- OST-FH: 8 AM
+- SUPSI-CH: 11 AM
+
+These times typically align with standard working hours, indicating a strategic approach to reach their audience during times they are most likely to be online. It appears that a typical worker is more productive and active on Twitter in the morning, with motivation waning around midday and continuing to decline until the end of the workday.
+
+### Most Active Days:
+There isn't a consistent "most active day" across universities. Some favor weekdays, while others show higher activity on weekends. This could reflect differences in their target audience or the nature of their content.
+
+- FHNW: Tuesday
+- FH Graubünden: Tuesday
+- ZHAW: Wednesday
+- BFH: Tuesday
+- HES-SO: Tuesday
+- HSLU: Thursday
+- OST-FH: Friday
+- SUPSI-CH: Friday
+
+The pattern also suggests that tweet activity tends to be higher earlier in the week, with motivation and tweet frequency potentially falling as the week progresses.
+
+### Release Strategies:
+strategy and perhaps a more reactive approach to current events or trends.
+While universities have peak hours and days, the intervals between tweets vary significantly, indicating a more reactive strategy rather than a rigid release schedule. This variability suggests that the universities might be responding to real-time events or trends rather than sticking to a strict posting schedule.
+
 ```{r}
 # Count each tweet by university and hour of the day
 tweet_counts_by_hour_of_day <- tweets %>%
@@ -224,6 +253,13 @@ for (curr_year in unique_years) {
   }
 }
 ```
+
+### Overall Trends:
+Most Common Time Interval for Tweets: The time intervals between tweets also vary widely among the universities, with some universities having very frequent posts (every few minutes) while others have longer intervals (several hours or even days).
+Most Active Hour Overall: Across all universities, 11 AM is the most common hour for tweets, with a total of 2356 tweets posted at this time.
+### Conclusion:
+The data indicates that Swiss Universities of Applied Sciences primarily tweet during working hours and show distinct patterns in their most active days and hours. Workers tend to be more productive and active on Twitter in the morning, with a noticeable decline in activity around midday and towards the end of the week. This data-driven approach to analyzing Twitter activity can help universities optimize their social media strategies by identifying the best times and days to engage their audiences.
+
 ## Question 2: What are the tweets about and how do other Twitter users react to them (likes, etc.)?
 
 ### Data Preprocessing
@@ -236,7 +272,7 @@ tweets_filtered <- tweets %>%
 # Remove 'rt' because it is an word e.g 'engagiert'.
 extended_stopwords <- c(
   "#fhnw", "#bfh", "@htw_chur", "#hslu", "#supsi", "#sups",
-  "amp", "rt", "fr", "ber"
+  "amp", "rt", "fr", "ber", "t.co", "https", "http", "www", "com", "html"
 )
 # Create separate DFMs for each language
 dfm_list <- list()
@@ -271,10 +307,21 @@ for (sel_lang in langs) {
 }
 ```
 ### Content Analysis
-- Hslu has much english tweets
-- BFH and FHNW has much german tweets
-- Supsi have much italian tweets, the most common words are in italian
-- hes-so have much french tweets, the most common words are in french
+Tweets were analyzed across four languages: German, French, Italian, and English. Each university tends to tweet predominantly in one or more languages, reflecting the linguistic diversity of Switzerland.
+
+- German: Predominantly used by BFH and FHNW. Common words include "neu" (new), "mehr" (more), "schweiz" (Switzerland), and "studier" (study).
+- French: Primarily used by HES-SO. Common words include "projet" (project), "recherch" (research), and "tudi" (study).
+- Italian: Mostly used by SUPSI. Common words include "nuov" (new), "progett" (project), and "student" (student).
+- English: Frequently used by HSLU. Common words include "student", "project", "thank", and "university".
+### Word Frequency:
+- English: The most frequent words were "student", "new", "@hslu", "university", "project", "thank", "@zhaw", "day", "science", and "today".
+- German: The most frequent words were "neu", "mehr", "schweiz", "werd", "all", "studier", "heut", "hochschul", "bfh", and "jahr".
+- Italian: The most frequent words were "nuov", "sups", "progett", "student", "present", "info", "iscrizion", "cors", "ricerc", and "formazion".
+- French: The most frequent words were "hes-so", "right", "arrow", "dan", "projet", "a", "tudi", "haut", "col", and "@hes_so".
+
+It's important to note that some words like "right" 👉 and "arrow" ➡️ are actually names of parsed emojis and not written words in the tweets.
+
+Word clouds for each language visually depicted the most common words, emphasizing their relative frequencies. The analysis revealed that universities tweet in multiple languages, reflecting the linguistic diversity of their audience. The most common words often related to educational themes, projects, and institutional news, indicating a focus on academic content.
 ```{r}
 # Word Frequencies & Visualization
 words_freqs_en <- sort(colSums(dfm_list$en), decreasing = TRUE)
@@ -339,6 +386,15 @@ for (uni in unique(tweets$university)) {
 }
 ```
 ### Userreaction Analysis
+A weighted engagement metric was calculated to measure user reactions, considering both likes (favorites) and retweets, with retweets given double weight.
+
+Posting Times of Most Engaged Tweets: The analysis of the posting times of the most engaged tweets (top 1000 by engagement) showed that:
+
+- The most engaged tweets were posted throughout the day, with a notable peak around mid-morning (11 AM).
+- This pattern aligns with the overall finding that users tend to be more active and engaged during typical working hours. Which can be a sign, that the users are more active during the day and not during the night. Or the customers of the universities are working also in a university or are students.
+
+### Content of Most Engaged Tweets:
+The most common words in the most engaged tweets included "mehr" (more), "neue" (new), "schweiz" (Switzerland), "schweizer" (Swiss), "right", "heut" (today), "zeigt" (shows), "#hsluinformatik" (HSLU informatics), "studi" (study), and "zhaw". Again, "right" and similar terms are names of emojis and not actual 
 ```{r}
 # Calculate a 'weighted engagement' metric
 tweets <- tweets %>%
@@ -392,9 +448,33 @@ wordcloud2(data.frame(
   freq = freqs_most_engaged
 ), size = 0.5)
 ```
+
+The analysis indicates that Swiss Universities of Applied Sciences tweet in multiple languages, reflecting the linguistic diversity of their audience. The tweets often focus on educational themes, projects, and institutional news. User engagement is highest for tweets posted during working hours, with the most engaging content often including timely updates and relevant academic information. Recognizing the role of emojis in enhancing engagement, universities can further optimize their social media strategies to maximize reach and impact.
 ## Question 3: How do the university tweets differ in terms of content, style, emotions, etc?
 
 ### Content Analysis (Word Clouds)
+Each university shows distinct patterns in the words and emojis used in their tweets. The analysis involved creating word clouds and identifying the most common words and emojis.
+
+Most Common Words:
+
+- FHNW: Common words include "mehr" (more), "hochschul" (university), and "studierend" (students).
+- FH Graubünden: Words like "chur" (location), "htw" (university abbreviation), and "busi" (business) are frequent.
+- ZHAW: Frequent words include "zhaw" (university abbreviation), "engineering", and "schweizer" (Swiss).
+- BFH: Common terms are "bern" (location), "projekt" (project), and "hochschul" (university).
+- HES-SO: Words like "hes-so" (university abbreviation), "projet" (project), and "tudiant" (student) are prevalent.
+- HSLU: Common words are "hslu" (university abbreviation), "luzern" (location), and "hochschul" (university).
+- OST-FH: Frequent terms include "ost" (university abbreviation), "st.gallen" (location), and "podcast".
+- SUPSI-CH: Words like "supsi" (university abbreviation), "formazion" (education), and "progetto" (project) are prevalent.
+
+Most Common Emojis:
+- FHNW: Top emojis include 👉 (backhand index pointing right), 💛 (yellow heart), and 🖤 (black heart).
+- FH Graubünden: Frequent emojis are 🎉 (party popper), 😃 (grinning face with big eyes), and 😊 (blush).
+- ZHAW: Common emojis include 👉 (backhand index pointing right), ⚡ (high voltage), and 😉 (wink).
+- BFH: Top emojis are 👉 (backhand index pointing right), 🔋 (battery), and 👇 (backhand index pointing down).
+- HES-SO: Common emojis are 👉 (backhand index pointing right), 🎓 (graduation cap), and ➡ (arrow right).
+- HSLU: Top emojis include 🎓 (graduation cap), 👨 (man), and 🚀 (rocket).
+- OST-FH: Frequent emojis are 👉 (backhand index pointing right), ➡ (arrow right), and 🎓 (graduation cap).
+- SUPSI-CH: Common emojis include 👉 (backhand index pointing right), 🎓 (graduation cap), and 🎉 (party popper).
 ```{r}
 for (uni in unique(tweets$university)) {
   uni_tweets <- tweets %>%
@@ -573,6 +653,7 @@ for (uni in universities) {
 }
 ```
 ### Style Analysis
+The distribution of tweet lengths shows variation across universities. Most tweets are concise, aligning with Twitter's character limit, but the exact length distribution differs among institutions. It is interesting to see that much tweets have around 150 words and that the tweets from the universities are not that long. It is a typical sign that the tweets are not that long and this is a common thing in social media.
 ```{r}
 tweets %>%
   mutate(tweet_length = nchar(full_text)) %>%
@@ -581,6 +662,22 @@ tweets %>%
   labs(title = "Distribution of Tweet Lengths")
 ```
 ### Sentiment Analysis
+Sentiment analysis was conducted to evaluate the emotional tone of the tweets. The analysis used the Syuzhet method to calculate sentiment scores for each tweet.
+
+Overall Sentiment Trends:
+- The sentiment scores vary over time and by university, showing fluctuations in the emotional tone of the tweets.
+- Positive words commonly found in tweets include terms related to academic achievements, collaborations, and positive experiences.
+- Negative words often relate to challenges, competitions, and issues faced by the universities.
+
+Sentiment by University:
+- FHNW: Positive words include "academy", "accelerate", and "activities". Negative words include "avoid", "bacteria", and "challenge".
+- FH Graubünden: Positive words include "able", "academic", and "advantage". Negative words include "competition", "corruption", and "fire".
+- ZHAW: Positive words include "abilities", "academic", and "achievement". Negative words include "barrier", "challenge", and "competition".
+- BFH: Positive words include "academic", "access", and "activities". Negative words include "aggression", "competition", and "fail".
+- HES-SO: Positive words include "academic", "active", and "amazing". Negative words include "confessions", "failure", and "hard".
+- HSLU: Positive words include "academic", "access", and "achievement". Negative words include "addiction", "challenge", and "fail".
+- OST-FH: Positive words include "announce", "beautiful", and "collaboration". Negative words are minimal, including "dire" and "fire".
+- SUPSI-CH: Positive words include "academic", "access", and "achievement". Negative words include "barrier", "cloud", and "danger".
 ```{r}
 # Calculate Sentiment for Supported Languages Only
 langs <- c("de", "fr", "it", "en")
@@ -588,6 +685,7 @@ langs <- c("de", "fr", "it", "en")
 tweets_filtered <- tweets %>%
   filter(lang %in% langs)
 
+# TODO: because sentiment only works for english
 # Create Function to Get Syuzhet Sentiment
 get_syuzhet_sentiment <- function(text, lang) {
   # Check if language is supported
@@ -601,7 +699,6 @@ get_syuzhet_sentiment <- function(text, lang) {
 # Calculate Syuzhet Sentiment for each Tweet
 tweets_filtered$sentiment <-
   mapply(get_syuzhet_sentiment, tweets_filtered$full_text, tweets_filtered$lang)
-
 
 plot_data <- tweets_filtered %>%
   group_by(university, month) %>%
@@ -623,75 +720,88 @@ ggplot(plot_data, aes(
 
 for (uni in unique(tweets$university)) {
   uni_tweets <- tweets %>%
-    filter(university == uni, lang %in% langs)
+    filter(university == uni, lang == "en")
 
   uni_tweets$sentiment <-
     mapply(get_syuzhet_sentiment, uni_tweets$full_text, uni_tweets$lang)
 
-
   plot_data <- uni_tweets %>%
-    group_by(year, month) %>%
+    group_by(month) %>%
     summarize(mean_sentiment = mean(sentiment, na.rm = TRUE))
 
   # Plot Syuzhet Sentiment Over Time (Per University)
-  print(ggplot(plot_data, aes(x = month, y = mean_sentiment)) +
-    geom_line(aes(color = as.factor(year))) +
+  print(ggplot(plot_data, aes(x = month, y = mean_sentiment, group = 1)) +
+    geom_line() +
+    geom_smooth(method = "lm", se = FALSE, color = "red") +
     labs(
       title = paste0("Mean Syuzhet Sentiment Over Time by - ", uni),
-      y = "Mean Sentiment Score"
-    ) +
-    scale_x_datetime(date_breaks = "1 month", date_labels = "%Y-%m") +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-    facet_wrap(~year, scales = "free_x"))
+      y = "Mean Sentiment Score",
+      x = "Month"
+    ))
 
   # Did not found a way to get the sentiment from the tweets for each language so I will use the full_text_emojis column and detect the language of the words only in german
-  uni_tweets_de <- uni_tweets %>%
-    filter(lang == "de")
   # Tokenize and Preprocess Words
-  uni_words <- uni_tweets_de %>%
+  uni_words_en <- uni_tweets %>%
     unnest_tokens(word, full_text_emojis) %>%
-    anti_join(get_stopwords(language = "de")) %>%
-    distinct() %>% # remove duplicated words
-    filter(nchar(word) > 3) %>% # remove words with less than 4 characters
-    filter(!str_detect(word, "\\d")) # remove numbers
+    anti_join(get_stopwords(language = "en"), by = "word") %>%
+    distinct() %>%
+    filter(nchar(word) > 3) %>%
+    filter(!str_detect(word, "\\d")) %>%
+    filter(!str_detect(word, "https?://\\S+|www\\.\\S+|t\\.co|http|https"))
 
-  # Join Sentiment with Words (language specific)
-  sentiment_words <- uni_words %>%
+
+  sentiment_words_en <- uni_words_en %>%
     mutate(
-      sentiment = get_sentiment(word, method = "syuzhet", lang = "de")
+      sentiment = get_sentiment(word, method = "syuzhet")
     )
 
   # Separate Positive and Negative Words
-  positive_words <- sentiment_words %>%
+  positive_words_en <- sentiment_words_en %>%
     filter(sentiment >= 0) %>%
     count(word, sort = TRUE) %>%
-    rename(freq = n) # Rename 'n' to 'freq'
+    rename(freq = n)
 
-  negative_words <- sentiment_words %>%
+  negative_words_en <- sentiment_words_en %>%
     filter(sentiment < 0) %>%
     count(word, sort = TRUE) %>%
-    rename(freq = n) # Rename 'n' to 'freq'
+    rename(freq = n)
 
   # Create and Display Word Clouds
   # positive words
-  wordcloud2(data.frame(
-    word = positive_words$word,
-    freq = positive_words$freq
-  ), size = 0.5)
+  print(paste0("Positive words for: ", uni))
+  print(head(positive_words_en, 20))
+  print(wordcloud2(data.frame(
+    word = positive_words_en$word,
+    freq = positive_words_en$freq
+  ), size = 0.5))
+
+  print(paste0("Negative words for: ", uni))
+  print(head(negative_words_en, 20))
   # negative words
-  wordcloud2(data.frame(
-    word = negative_words$word,
-    freq = negative_words$freq
-  ), size = 0.5)
+  print(wordcloud2(data.frame(
+    word = negative_words_en$word,
+    freq = negative_words_en$freq
+  ), size = 0.5))
 }
 ```
-
+### Conclusion:
+The analysis indicates that Swiss Universities of Applied Sciences exhibit diverse tweeting patterns in terms of content, style, and emotions. Tweets often focus on academic achievements, projects, and institutional news, with varying emotional tones across different universities. Recognizing these patterns can help universities optimize their social media strategies to better engage with their audiences.
 ## Question 4: What specific advice can you give us as communication department of BFH based on your analysis? How can we integrate the analysis of tweets in our internal processes, can you think of any data products that would be of value for us?
+
+The comprehensive analysis of BFH's tweets reveals several insights that can be leveraged to enhance the communication strategy.
+
+### Language Analysis:
+BFH predominantly tweets in German, with 2760 tweets in this language. This aligns with the linguistic preferences of their primary audience.
+
+### Emoji Analysis:
+The analysis of emoji usage shows that certain emojis are frequently used, which can be leveraged to increase engagement. Popular emojis like 🎓 (graduation cap) and 🚀 (rocket) often signify academic achievements and dynamic growth, resonating well with the audience.
+
 
 ### Summary key insights from the analysis
 ```{r}
 # Language Analysis
 tweets %>%
+  filter(university == "bfh") %>%
   count(lang) %>%
   arrange(desc(n))
 
@@ -712,9 +822,29 @@ insights <- list(
   "Sentiment Analysis" = head(tweets_filtered$sentiment)
 )
 ```
-# Recommendations:
-# 1. Optimize tweet release times based on peak engagement hours.
-# 2. Focus on specific days with high activity for important announcements.
-# 3. Utilize sentiment analysis to tailor content that resonates positively with the audience.
-# 4. Implement topic modeling to identify key themes and align communication strategy accordingly.
 
+### Recommendations:
+Based on the analysis, the following recommendations can be made to enhance BFH's communication strategy:
+1. Optimize Tweet Release Times:
+Based on the analysis of tweet activity, the most active hours for BFH are typically in the morning. Focusing on releasing tweets during these peak hours can maximize engagement. Scheduling important announcements and updates during these times will likely yield better visibility and interaction.
+2. Focus on Specific Days for Announcements:
+The analysis shows that Tuesday is the most active day for BFH tweets. Leveraging this day for critical updates and major announcements can ensure they reach a wider audience. Aligning content release schedules with these high-activity days can enhance communication effectiveness.
+ Sentiment Analysis:
+Sentiment analysis indicates the emotional tone of the tweets, helping tailor content to resonate positively with the audience. By understanding which types of tweets generate positive reactions, the communication team can craft messages that are more likely to be well-received. This could involve highlighting student achievements, successful projects, and positive institutional news.
+4. Implement Topic Modeling:
+Topic modeling reveals the key themes prevalent in the tweets. For BFH, topics often include academic projects, student updates, and digital initiatives. Aligning the communication strategy to emphasize these themes can enhance relevance and engagement. Regularly updating the communication team on trending topics can help keep the content aligned with audience interests.
+
+### Integrating Tweet Analysis into Internal Processes:
+To fully leverage these insights, the BFH communication department can integrate tweet analysis into their regular workflow:
+1. Real-Time Analytics Dashboard: Implement a dashboard that tracks tweet performance, including engagement metrics, sentiment scores, and topic trends. This allows for real-time adjustments to the communication strategy.
+2. Scheduled Reports: Generate weekly or monthly reports summarizing key metrics and insights. This helps the team stay informed about what content is performing well and where improvements can be made.
+3. Content Calendar: Develop a content calendar that aligns tweet releases with peak engagement times and days. Incorporate findings from sentiment and topic analyses to plan content that resonates with the audience.
+4. Feedback Loop: Establish a feedback loop where the communication team reviews analytics data and adjusts the strategy accordingly. Regular team meetings to discuss these insights can foster a more data-driven approach to communication.
+
+### Potential Data Products:
+To further enhance the communication strategy, BFH can consider developing data products that provide additional value:
+1. Engagement Prediction Tool: A tool that predicts the best times to tweet based on historical data, optimizing tweet scheduling for maximum engagement.
+2. Sentiment Analysis Bot: An automated system that analyzes the sentiment of drafts before they are posted, ensuring that the tone is appropriate and likely to generate positive reactions.
+3. Trend Tracker: A feature that identifies emerging topics and trends in real-time, allowing the communication team to quickly adapt and incorporate relevant themes into their messaging.
+
+By integrating these recommendations and tools, BFH can enhance its communication strategy, ensuring that its messages are timely, relevant, and engaging for its audience.

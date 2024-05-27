@@ -127,8 +127,7 @@ for (var in categorical_vars) {
   data_wage %>%
     ggplot(aes(x = factor(!!sym(var)))) +
     geom_bar(fill = "steelblue") +
-    labs(title = paste("Distribution of", var), x = var, y = "Frequency") +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+    labs(title = paste("Distribution of", var), x = var, y = "Frequency")
 }
 ```
 After these analyses, we concentrated on the top earners. In other words, we looked for the top 5% of earners.
@@ -400,7 +399,10 @@ team_data_transformed <- as.data.frame(
 pred_xgboost <- predict(xgboost_model, newdata = team_data_transformed)
 print(pred_xgboost)
 # Print as barplot
-barplot(pred_xgboost, main = "Predicted Wages for Team Membrs", xlab = "Team Member", ylab = "Predicted Wage", col = "skyblue")
+barplot(pred_xgboost,
+  main = "Predicted Wages for Team Members",
+  xlab = "Team Member", ylab = "Predicted Wage", col = "skyblue"
+)
 
 # Replace NAs with 0 in team_data
 team_data_transformed[is.na(team_data_transformed)] <- 0
