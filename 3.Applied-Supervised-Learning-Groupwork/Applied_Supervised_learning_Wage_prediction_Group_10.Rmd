@@ -145,11 +145,13 @@ summary(top_earners$experience)
 summary(top_earners$country)
 summary(top_earners$education)
 ```
-We see that the top 5% of the highest earners include a total of 536 people) 491 men and 38 women. The analysis of the top 5% shows that people between the ages of 30 and 34 earn the most. In terms of experience, it is people with between 5 and 11 years of work experience who earn the most. 380 of the people come from the USA, which is no surprise in this case, as most of the respondents come from the USA. However, it is interesting to note that 255 of the 536 people have a master's degree, while only 160 have a doctorate.
+We see that the top 5% of the highest earners include a total of 536 people 491 men and 38 women. The analysis of the top 5% shows that people between the ages of 30 and 34 earn the most. In terms of experience, it is people with between 5 and 11 years of work experience who earn the most. 380 of the people come from the USA, which is no surprise in this case, as most of the respondents come from the USA. However, it is interesting to note that 255 of the 536 people have a master's degree, while only 160 have a doctorate.
 
 Then our goal was to scale numeric data to ensure that features have a similar range of values. After that our goal was to convert categorical variables into a format suitable for modeling.
 
 ```{r }
+# Remove above all wages over 200'000
+data_wage <- data_wage %>% filter(wage <= 200000)
 # One-hot encode categorical variables and scale numeric variables
 data_encoded <- data_wage %>%
   mutate(across(where(is.character), factor)) %>%
@@ -166,7 +168,7 @@ Now it is time to decide which variables (characteristics) to include in the mod
 
 ## Model Selection and Training:
 
-In this chapter we have trained different models (linear regression, regression tree, random forest) in order to find the best performing one. The models were trained with the data set data_transformed.
+In this chapter we have trained different models (linear regression, random forest, Generalized Boosted Regression Model (GBM) and xgboost) in order to find the best performing one. The models were trained with the data set data_transformed.
 
 ```{r}
 # Split data into training and testing sets
@@ -239,7 +241,7 @@ gbm_tuned <- train(
 
 ## Model Evaluation
 
-Following the training of the models we evaluate here which modes is the best performing. We will asses this using the metric RMSE.
+Following the training of the models we evaluate here which modes is the best performing. We will asses this using the metric RMSE, MAE and R Squared.
 
 ```{r}
 # Define your model list (including tuned models if applicable)
@@ -298,22 +300,24 @@ ggplot(comparison_long, aes(x = Actual, y = Predicted, color = Model)) +
   theme_minimal() +
   facet_wrap(~Model)
 ```
+### Winner Model
+The XGBoost model shows the best performance. Gradient Boosting has slightly less accurate predictions based on RMSE, MAE and R-suqred.
 
-The Gradient Boosting and XGBoost models show the best performance, with Gradient Boosting slightly edging out XGBoost in terms of RMSE and MAE.
+- RMSE (Root Mean Squared Error): The XGBoost Model shows an RMSE of 26425.57.This indicates that the wage predictions are off by approximately CHF 26,425 from the actual salaries.
+- MAE (Mean Absolute Error): The MAE of 18136.72 can be interpreted as predictions are off by CHF 18,136 or less from the actual values.
+- R-squared: The R-squared of 0.662 indicates that XGBoost explains about 66.2% of the variance. This means that the model captures a substantial portion of the factors influencing wage differences.
 
-Here's a breakdown of the model performance:
+### Key Findings
 
-- RMSE (Root Mean Squared Error): Gradient Boosting has a slightly higher RMSE (43573.9) compared to XGBoost (43005.61), suggesting a marginally smaller average prediction error.
-- MAE (Mean Absolute Error): Similarly, Gradient Boosting has a slightly higher MAE (24697.86) than XGBoost (23676.49), indicating a slightly smaller average absolute deviation from the actual wages.
-- R-squared: Both models have very high R-squared values (0.503 for Gradient Boosting and 0.519 for XGBoost), indicating they explain a substantial portion of the variance in wages.
+- XGBoost and Gradient Boosting (Untuned and Tuned): These models clearly outperform the others, with XGBoost slightly ahead in terms of RMSE, MAE and R-squared.
+- Random Forest: The tuned Random Forest model shows a noticeable improvement over the basic Random Forest.
+- Linear Regression: Is the simplest model and performs not that well, but is outperformed by the tree-based models (Random Forest, Gradient Boosting, XGBoost).
+### Plot Interpretation
+The plot visually confirms the numerical results:
 
-Interpretation of the Plot:
-The plot visually supports these findings. The Gradient Boosting (red) and XGBoost (purple) predictions are the most tightly clustered around the diagonal line representing a good prediction. This shows their better accuracy compared to the other models. The other model predictions are more scattered.
-
-Important Considerations:
-- Marginal Difference: The difference in performance between Gradient Boosting and XGBoost is very small. It does not care which model we chose. We will predict the wages for the team members with both models.
-- Overfitting Risk: There might be a slight risk of overfitting for Gradient Boosting and XGBoost due to their high R-squared values.
-- Random Forest: The Random Forst Modell is not trained with the model function and therefore a fair comparison is not possible. However, the Random Forest model is also a good model for predicting wages.
+- The XGBoost (purple) and Gradient Boosting (red/orange) points are the tightest around the diagonal line, signifying the best predictions.
+- The improvement from tuning Random Forest is evident in its slightly tighter clustering compared to the untuned version.
+- Linear Regression's points are the most scattered, reflecting its lower accuracy.
 
 ## Model Explanation
 
@@ -334,27 +338,26 @@ for (model_name in names(model_list)) {
 ```
 
 ### Insights from Model Comparison (General):
-Several key factors show a strong explainability of wages across all models, indicating their fundamental importance in determining wages:
+Several factors continue to show a strong explainability of wages across all models:
 
-- Country: Geographic country plays a major role, likely reflecting variations in cost of living, industry concentration, and demand for machine learning talent.
-- Age and Experience: Age and years of experience are consistently strong predictors, suggesting that wages generally increase with professional maturity and expertise.
-- Job Role: The specific job role within the field of machine learning significantly impacts salary, as different roles require varying levels of specialization and responsibility.
-- Coding Experience (for Data Analysis): The length of time spent coding for data analysis emerges as a crucial factor, highlighting the value placed on practical programming skills.
-- Machine Learning Usage at Work (ML_atwork): Whether or not someone utilizes machine learning in their work is a consistent predictor, underscoring the premium placed on applied ML skills.
-- Cloud Experience (AWS): Experience with Amazon Web Services (AWS) stands out as a significant factor, reflecting the widespread adoption of AWS in the industry and the demand for cloud expertise.
-- Domain-Specific Factors: Various domain-specific variables, such as those relating to specific machine learning activities or framework usage, also demonstrate considerable influence.
-
+- Country: The country is a major factor when wages are predicted. This is likely because the variations in cost of living, industry concentration, and demand for machine learning talent. Then when a country has more machine learning jobs, this rises the explainability for the wage related to machine learning usage at work. (See below)
+- Age and Experience: Age and years of experience are consistently strong predictors. This suggests that wages generally increase with maturity and expertise.
+- Job Role: The job role has impacts on the wage. This is likely because different roles require different skill sets and responsibilities.
+- Coding Experience for Data Analysis: The length of time spent coding continues to emerge as a impactful factor. This may also be connected with age and experience.
+- Machine Learning Usage at Work (ML_atwork): Whether or not someone utilizes machine learning in their work is a consistent predictor. This may also be connected with the job role and country.
+- Cloud Experience (AWS): Experience with Amazon Web Services (AWS) stands out as a factor in several models. This can reflect the widespread adoption of AWS in the industry.
+- Domain-Specific Factors: Various domain-specific variables, such as machine learning activities or framework usage.
 ### Model-Specific Insights
 #### Linear Regression:
-The linear regression model heavily emphasizes country, age, and experience, aligning with the expectation of linear relationships between these factors and salary. AWS experience is notably prominent, suggesting a potential salary premium for professionals with this skill.
+The linear regression model emphasizes country, age, and experience, aligning with the expectation of linear relationships between these factors and salary. AWS experience is notably prominent, suggesting a potential salary premium for professionals with this skill.
 #### Random Forest:
-Compared to linear regression, the random forest model distributes importance more evenly across various predictors. country, age, job role, and experience remain significant factors. Notably, specific programming languages and tools gain importance, indicating that tool preferences might influence salary in complex, non-linear ways.
+Compared to linear regression, the random forest model distributes importance more evenly across various predictors. Country, age, job role, and experience remain significant factors. Notably, specific programming languages and tools gain importance, indicating that tool preferences might influence salary in complex, non-linear ways.
 #### Gradient Boosting:
-Similar to the random forest, but with a stronger focus on country, age, and job role. Time spent coding for data analysis emerges as a top predictor, reinforcing the value of practical coding skills in this domain.
+The gradient boosting model shows a stronger focus on country, age, and job role. Time spent coding for data analysis emerges as a top predictor, reinforcing the value of practical coding skills in this domain.
 #### XGBoost:
-The XGBoost model closely aligns with the Gradient Boosting model in terms of variable importance, with country, age, coding experience, and job role as the top predictors. This allignment between the two top-performing models provides strong evidence for the relevance of these factors in determining salary.
+The XGBoost model closely aligns with the gradient boosting model in terms of variable importance, with country, age, coding experience, and job role. This alignment between the two top-performing models provides strong evidence for the relevance of these factors in determining salary.
 #### Tuned Models (Random Forest and Gradient Boosting):
-The tuned models generally exhibit similar variable importance patterns as their untuned counterparts, with minor shifts in rankings. This suggests that the overall relationships between predictors and salary remain relatively stable, even after hyperparameter tuning.
+The tuned models show similar variable importance as their untuned models, with minor shifts in rankings. This suggests that the overall relationships between predictors and salary remain stable.
 
 ## Wage Prediction:
 ```{r}
@@ -392,23 +395,22 @@ team_data_encoded <- team_data %>%
 team_data_transformed <- as.data.frame(
   predict(dummies, newdata = team_data_encoded)
 )
-# replace NAs with 0
-team_data_transformed[is.na(team_data_transformed)] <- 0
 # Use XGBoost model for prediction
 pred_xgboost <- predict(xgboost_model, newdata = team_data_transformed)
 print(pred_xgboost)
-# Use Gradient Boosting model for prediction
-pred_gbm <- predict(gbm_model, newdata = team_data_transformed)
+
+# Replace NAs with 0 in team_data
+team_data_transformed[is.na(team_data_transformed)] <- 0
+# use gbm_model for prediction
+pred_gbm <- predict(gbm_tuned, newdata = team_data_transformed)
 print(pred_gbm)
 ```
-Until the end we could not factor the data_wage properties to our custom team data set which is why we could not predict the wages for the team members.
+Until the end we could not factor the data_wage properties to our custom team data set which is why we could not predict the wages for the team members exactly. For example the prediction with the gbm_model does not work because of the NA values in the team_data. We would have to replace the NA values with 0 in order to make the prediction work. This would distort the prediction. We will stick to the XGBoost model for our predictions and ignore the wages of gbm tuned model.
+
 ### Interpreting the Predictions:
+XGBoost predicts wages of 43798.56 33963.88 41666.16 and 37151.39 for the four team members. All of the team do have a higher yearly wage. This shows that eather the team members are not well displayed in the team data set or the MAE of 18136.72 has a big impact on the wage.
+The predictions are based on the model's learned relationships between the variables like country and experience and wages. The predictions provide an estimate of the expected salary for each team member based on these factors. When a team member has more years of experience this than noted in the dataset this could lead to a higher wage than now printed.
 
-- XGBoost: Predicts wages of 57900, 28384, 40068, and 46464 for the four team members, respectively.
-- Gradient Boosting: Predicts wages of 28587, 16727, 20804, and 25892 for the four team members. Here when the NA values would not be replaced with 0, the predictions would not work.
-### Noticeable Differences:
-
-The XGBoost model predicts significantly higher wages for the first and fourth team members compared to the Gradient Boosting model. We think this is due to the different ways the models handle the relationships between predictors and wages.
 ### Impact of Replacing NAs with 0:
 
 Replacing missing values (NAs) with zeros will propably distort the predictions:
@@ -472,7 +474,9 @@ cat("R-squared (Stacked Ensemble):", r2, "\n")
 summary(best_model)
 
 # Use the best-performing model from H2O AutoML for predictions
-pred_best_model <- as.data.frame(h2o.predict(best_model, as.h2o(team_data_transformed)))
+pred_best_model <- as.data.frame(
+  h2o.predict(best_model, as.h2o(team_data_transformed))
+)
 predicted_wages <- pred_best_model$predict
 print(predicted_wages)
 
@@ -482,11 +486,23 @@ cat(
   "with an RMSE of", rmse, ", MAE of", mae, ", and R-squared of", r2, ".\n"
 )
 ```
-We see that h2o did not lead to a better model.
-### Model Details:
-Type: Stacked ensemble model (H2ORegressionModel: stackedensemble), meaning it combines predictions from multiple base models to make a final prediction.
-Stacking Strategy: The ensemble uses cross-validation to train and combine the base models, same as we used previously
-Base Models: It uses 11 out of a possible 43 base models. These are all Gradient Boosting Machine (GBM) models.
-Metalearner: A Generalized Linear Model (GLM) is used as the metalearner, which learns how to best combine the predictions of the base models.
+### Interpretation for H2O Wages Prediction
+The H2O model used for wage prediction is a stacked ensemble. It combines 88 basemodels  (76 GBMs (Gradient Boosting Machines), 2 DRFs (Distributed Random Forests), 9 Deep Learning models, and 1 GLM (Generalized Linear Model).) multiple base models to improve prediction accuracy. Like in our previous trainings a cross validation with 5 folds was used to evaluate the performance.
 
-Still the h2o model did not lead to a better model. We will stick to the XGBoost model for our predictions.
+### Variables for Stacked Ensemble Model:
+The stacked ensemble model incorporates a diverse set of predictors to estimate wages accurately. Sadly the variable importance details are not provided in the output summary. Also with var_imp we could not get the variable importance.
+### Summary
+The H2O stacked ensemble model demonstrates a slightly better performance with a cross-validated R-squared of approximately 0.68, indicating that around 68% of the variance in wages can be explained by the model's predictors.
+
+# Conclusion and Recommendations
+The wage prediction grou work identified key factors influencing the wage of the provided dataset. The XGBoost model and  the H2O AutoML stacked ensemble showed the best overall metrics. Key factors influencing wages include country, age, experience, job role, coding experience, ML usage at work, and AWS experience.
+
+## Recommendations:
+- Boruta Algorithm: Usage of the Boruta algorithm to identify and retain only the most important variables. This would improve the models performance.
+- Imputation Techniques: Use advanced imputation techniques for handling missing values instead of replacing NAs with zeros.
+- Ensemble Methods: Combine predictions from multiple models. Like h2o AutoML does.
+- Hyperparameter Tuning: Continuously optimize hyperparameters using techniques like grid search or random search to enhance model performance.
+- New Features: Incorporate relevant features such as certifications, specific project experience and soft skills.
+
+Whit more time we could implement these recommodations, the model's R-squared value can potentially be increased, leading to more accurate wage predictions.
+

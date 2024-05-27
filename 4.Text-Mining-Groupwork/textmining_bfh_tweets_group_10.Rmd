@@ -26,27 +26,38 @@ library(lubridate)
 library(reshape2)
 library(stopwords)
 ```
-Load the tweets and check if they are loaded correctly
+Load the tweets and check if they are loaded correctly. We also check the summary for a first interpretation. The summary(tweets) output reveals the following:
+
+- Time Range: Tweets span from 2009 to 2023, with most posted between 2015 and 2020.
+- Distribution: The data is unevenly distributed, with the median date in 2018.
+- Engagement: Retweets and favorites range from 0 to 267 and 188, respectively, with most tweets having low engagement.
+- Universities: The university column indicates tweets from multiple universities, allowing for comparison.
+
 ```{r}
 # Set working directory
 # getwd()
 # setwd("./data/")
 
 # Load data
-load("./data/Tweets_all.rda")
+load("../data/Tweets_all.rda")
 
 # Check that tweets are loaded
 head(tweets)
 summary(tweets)
 ```
-Start preprocessing the tweets, to calculate the intervalls some additional properties are needed. We also extract the emojis from the tweets. So the emojis are written as text and can be analyzed in the wordcloud better. We also detect the language of the tweets to make separate wordclouds.
+Start preprocessing the tweets, to calculate the intervalls some additional properties are needed. The preprocessing steps transform raw tweet data into a structured format suitable for analysis. This includes:
+
+- Standardizing Date and Time: Ensures accurate temporal analysis.
+- Extracting Features: Derives relevant information (year, month, day, language) for targeted analysis.
+- Handling Emojis: Converts emojis to text for sentiment analysis and visualization.
+- Data Cleaning: Removes unnecessary tags and standardizes data types.
 ```{r}
 # Preprocessing Step: Convert date and time to POSIXct and format according to date, year and university. Detect language and extract emojis. The days are sorted from the system locale starting from monday
 tweets <- tweets %>%
   mutate(
     created_at = as.POSIXct(created_at, format = "%Y-%m-%d %H:%M:%S"),
     date = as.Date(created_at),
-    day = wday(created_at,
+    day = lubridate::wday(created_at,
       label = TRUE, abbr = FALSE,
       week_start = getOption("lubridate.week.start", 1),
       locale = Sys.getlocale("LC_TIME")
@@ -114,7 +125,7 @@ hour_with_most_tweets <- tweet_counts_by_hour_of_day %>%
   group_by(timeofday_hour) %>%
   summarize(total_tweets = sum(n)) %>%
   arrange(desc(total_tweets)) %>%
-  slice(1)
+  slice_max(n = 1, order_by = total_tweets)
 
 print(hour_with_most_tweets)
 
@@ -213,7 +224,7 @@ for (curr_year in unique_years) {
   }
 }
 ```
-## 2. What are the tweets about and how do other Twitter users react to them (likes, etc.)?
+## Question 2: What are the tweets about and how do other Twitter users react to them (likes, etc.)?
 
 ### Data Preprocessing
 ```{r}
@@ -469,7 +480,7 @@ wordcloud2(data.frame(
 ### LDA Topic Modeling
 ```{r}
 # Source: Christoph Zangger -> löscht alle Reihen mit nur 0s
-new_dfm <- dfm_subset(dfm_list$de, ntoken(dfm_list$de) > 0)
+new_dfm <- dfm_subset(dfm_list$en, ntoken(dfm_list$en) > 0)
 tweet_lda <- LDA(new_dfm, k = 5, control = list(seed = 123))
 # Tidy the LDA results
 topic_terms <- tidy(tweet_lda, matrix = "beta")
@@ -634,10 +645,10 @@ for (uni in unique(tweets$university)) {
     facet_wrap(~year, scales = "free_x"))
 
   # Did not found a way to get the sentiment from the tweets for each language so I will use the full_text_emojis column and detect the language of the words only in german
-  uni_tweets <- uni_tweets %>%
+  uni_tweets_de <- uni_tweets %>%
     filter(lang == "de")
   # Tokenize and Preprocess Words
-  uni_words <- uni_tweets %>%
+  uni_words <- uni_tweets_de %>%
     unnest_tokens(word, full_text_emojis) %>%
     anti_join(get_stopwords(language = "de")) %>%
     distinct() %>% # remove duplicated words
