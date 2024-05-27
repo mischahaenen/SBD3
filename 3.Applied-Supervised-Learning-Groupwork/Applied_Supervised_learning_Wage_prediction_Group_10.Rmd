@@ -357,9 +357,6 @@ The XGBoost model closely aligns with the Gradient Boosting model in terms of va
 The tuned models generally exhibit similar variable importance patterns as their untuned counterparts, with minor shifts in rankings. This suggests that the overall relationships between predictors and salary remain relatively stable, even after hyperparameter tuning.
 
 ## Wage Prediction:
-
-We have decided to use gender, age, country, education and experience.
-
 ```{r}
 # Load and prepare the team data
 set.seed(123)
