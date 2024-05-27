@@ -399,6 +399,8 @@ team_data_transformed <- as.data.frame(
 # Use XGBoost model for prediction
 pred_xgboost <- predict(xgboost_model, newdata = team_data_transformed)
 print(pred_xgboost)
+# Print as barplot
+barplot(pred_xgboost, main = "Predicted Wages for Team Membrs", xlab = "Team Member", ylab = "Predicted Wage", col = "skyblue")
 
 # Replace NAs with 0 in team_data
 team_data_transformed[is.na(team_data_transformed)] <- 0
@@ -480,6 +482,7 @@ pred_best_model <- as.data.frame(
 )
 predicted_wages <- pred_best_model$predict
 print(predicted_wages)
+barplot(predicted_wages, main = "Predicted Wages for Team Members", xlab = "Team Member", ylab = "Predicted Wage", col = "skyblue")
 
 # Conclusion
 cat(
