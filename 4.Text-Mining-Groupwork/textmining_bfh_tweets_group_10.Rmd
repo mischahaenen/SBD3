@@ -966,7 +966,7 @@ The analysis indicates that Swiss Universities of Applied Sciences exhibit diver
 The comprehensive analysis of BFH's tweets reveals several insights that can be leveraged to enhance the communication strategy.
 
 ### Language Analysis:
-BFH predominantly tweets in German, with 2760 tweets in this language. This aligns with the linguistic preferences of their primary audience.
+BFH predominantly tweets in German, with 3008 tweets in this language. This aligns with the linguistic preferences of their primary audience.
 
 ### Emoji Analysis:
 The analysis of emoji usage shows that certain emojis are frequently used, which can be leveraged to increase engagement. Popular emojis like 🎓 (graduation cap) and 🚀 (rocket) often signify academic achievements and dynamic growth, resonating well with the audience.
@@ -1001,6 +1001,7 @@ heatmap_data_bfh <- tweets %>%
   count(day, timeofday_hour) %>%
   complete(day, timeofday_hour, fill = list(n = 0))
 
+# Show the pattern of the post time by day and hour. You can see clearly the working hours which are the time where the most tweets are posted.
 ggplot(heatmap_data_bfh, aes(x = timeofday_hour, y = day, fill = n)) +
   geom_tile(color = "white") +
   scale_fill_gradient(low = "lightblue", high = "darkblue") +
@@ -1011,7 +1012,7 @@ engagement_hour_bfh <- tweets %>%
   filter(university == "bfh") %>%
   group_by(timeofday_hour) %>%
   summarise(avg_engagement = mean(weighted_engagement, na.rm = TRUE))
-
+# When we look at the engagement by hour, we can see that the most engagement is around 4pm until 8pm. There is also a slight peak in the midday
 ggplot(engagement_hour, aes(x = timeofday_hour, y = avg_engagement)) +
   geom_bar(stat = "identity", fill = "#37556E") +
   labs(title = "Average Engagement by Hour", x = "Hour", y = "Avg Engagement") +
@@ -1039,6 +1040,7 @@ insights <- list(
   "Sentiment Analysis" = head(tweets_filtered$sentiment)
 )
 ```
+Based on the analysis, the following recommendations and key insights can be made to enhance BFH's communication strategy:
 ### Key Insights:
 
 #### 1. Language and Emoji Usage:
