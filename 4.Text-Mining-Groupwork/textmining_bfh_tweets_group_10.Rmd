@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 library(tidyverse)
 library(lubridate)
 library(textclean)
-library(wordcloud2)
+library(wordcloud)
 library(sentimentr)
 library(lexicon)
 library(topicmodels)
@@ -22,9 +22,7 @@ library(textdata)
 library(cld3)
 library(tidyEmoji)
 library(dplyr)
-library(lubridate)
 library(reshape2)
-library(stopwords)
 ```
 Load the tweets and check if they are loaded correctly. We also check the summary for a first interpretation. The summary(tweets) output reveals the following:
 
@@ -65,7 +63,6 @@ tweets <- tweets %>%
     year = year(created_at),
     month = floor_date(created_at, "month"),
     university = as.character(university),
-    lang = detect_language(full_text),
     full_text_emojis = replace_emoji(full_text, emoji_dt = lexicon::hash_emojis)
   )
 
@@ -190,6 +187,24 @@ days_with_most_tweets_by_uni <- tweet_counts_by_week_day %>%
 
 print(days_with_most_tweets_by_uni)
 
+# Combine the most active hours and days for each university to show heatmap
+heatmap_data <- tweets %>%
+  group_by(timeofday_hour, day) %>%
+  count() %>%
+  ungroup()
+
+# Plot heatmap and we can see clearly that the most tweets are posted during the working hours from monday to friday
+ggplot(heatmap_data, aes(x = timeofday_hour, y = day, fill = n)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "lightblue", high = "darkblue") +
+  labs(
+    title = "Heatmap of Tweet Activity by Hour and Day",
+    x = "Hour of Day",
+    y = "Day of the Week",
+    fill = "Number of Tweets"
+  ) +
+  theme_minimal()
+
 # Calculate time intervals between tweets
 find_mode <- function(x) {
   ux <- unique(x)
@@ -206,42 +221,36 @@ tweets <- tweets %>%
 # Descriptive statistics of time intervals
 summary(tweets$time_interval)
 
-# setwd("../4.Text-Mining-Groupwork/plots")
-unique_years <- tweets$year %>% unique()
 # Pilot distribution of time intervals between tweets for each year
-for (curr_year in unique_years) {
-  # Filter data for the specific year
-  filtered_data <- tweets %>%
-    filter(year(created_at) == curr_year)
+universities <- unique(tweets$university)
+for (uni in universities) {
+  uni <- "bfh"
+  # Filter data for the specific university
+  uni_filtered_data <- tweets %>%
+    filter(university == uni)
+  # Calculate mode (most common interval) in hours
 
-  print(ggplot(filtered_data, aes(x = time_interval)) +
+  print(ggplot(uni_filtered_data, aes(x = time_interval)) +
     geom_histogram(fill = "lightblue") +
-    facet_wrap(~university) +
+    facet_wrap(~year) +
     labs(
       title = paste0(
-        "Distribution of time intervals between tweets - ", curr_year
+        "Distribution of time intervals between years - ", uni
       ),
       x = "Time interval (minutes)",
       y = "Tweet count"
     ))
-  universities <- filtered_data$university %>% unique()
-  for (uni in universities) {
-    # Filter data for the specific university
-    uni_filtered_data <- filtered_data %>%
-      filter(university == uni)
 
-    print(ggplot(uni_filtered_data, aes(x = time_interval)) +
-      geom_histogram(fill = "lightblue") +
-      labs(
-        title = paste0(
-          "Distribution of time intervals between tweets for ", uni,
-          " in ", curr_year
-        ),
-        x = "Time interval (minutes)",
-        y = "Tweet count"
-      ))
-    # Calculate mode (most common interval) in hours
-    most_common_interval_minutes <- find_mode(uni_filtered_data$time_interval)
+  for (curr_year in unique(uni_filtered_data$year)) {
+    # Filter data for the specific year
+    year_filtered_data <- uni_filtered_data %>%
+      filter(year(created_at) == curr_year)
+
+    print(paste0(
+      toupper(uni), " posted a total of ",
+      nrow(year_filtered_data), " tweets in ", curr_year
+    ))
+    most_common_interval_minutes <- find_mode(year_filtered_data$time_interval)
     most_common_interval_hours <- most_common_interval_minutes / 60
     print(paste0(
       "Most common time interval for ", uni,
@@ -255,14 +264,19 @@ for (curr_year in unique_years) {
 ```
 
 ### Overall Trends:
-Most Common Time Interval for Tweets: The time intervals between tweets also vary widely among the universities, with some universities having very frequent posts (every few minutes) while others have longer intervals (several hours or even days).
-Most Active Hour Overall: Across all universities, 11 AM is the most common hour for tweets, with a total of 2356 tweets posted at this time.
+
+- Most Common Time Interval for Tweets: The time intervals between tweets also vary widely among the universities, with some universities having very frequent posts (every few minutes) while others have longer intervals (several hours or even days).
+- Most Active Hour Overall: Across all universities, 11 AM is the most common hour for tweets, with a total of 2356 tweets posted at this time.
+
 ### Conclusion:
 The data indicates that Swiss Universities of Applied Sciences primarily tweet during working hours and show distinct patterns in their most active days and hours. Workers tend to be more productive and active on Twitter in the morning, with a noticeable decline in activity around midday and towards the end of the week. This data-driven approach to analyzing Twitter activity can help universities optimize their social media strategies by identifying the best times and days to engage their audiences.
 
 ## Question 2: What are the tweets about and how do other Twitter users react to them (likes, etc.)?
 
 ### Data Preprocessing
+The tweets are filtered based on language, focusing on German, French, Italian, and English. These languages where choosen based on the popularity over all tweet languages. It removes common and extended stopwords, including non-meaningful words like 'amp' (which represents '&') and 'rt' (commonly found in retweets). The extended stopwords list includes hashtags and URLs related to specific Swiss universities.
+
+Next, the code processes tweets separately for each language. This involves creating tokens from the text, removing unwanted characters, stemming words, and creating n-grams. The processed tokens are then used to create Document-Feature Matrices (DFMs) for each language.
 ```{r}
 langs <- c("de", "fr", "it", "en")
 tweets_filtered <- tweets %>%
@@ -321,40 +335,54 @@ Tweets were analyzed across four languages: German, French, Italian, and English
 
 It's important to note that some words like "right" 👉 and "arrow" ➡️ are actually names of parsed emojis and not written words in the tweets.
 
-Word clouds for each language visually depicted the most common words, emphasizing their relative frequencies. The analysis revealed that universities tweet in multiple languages, reflecting the linguistic diversity of their audience. The most common words often related to educational themes, projects, and institutional news, indicating a focus on academic content.
+Word clouds for each language visually show the most common words, emphasizing their relative frequencies. The analysis revealed that universities tweet in multiple languages, reflecting the linguistic diversity of their audience. But still we can order the universities by language. For example BFH and FHNW are tweeting in german, HES-SO in french, SUPSI in italian and HSLU in english.
+
 ```{r}
 # Word Frequencies & Visualization
 words_freqs_en <- sort(colSums(dfm_list$en), decreasing = TRUE)
 head(words_freqs_en, 20)
-wordcloud2(data.frame(
-  word = names(words_freqs_en),
-  freq = words_freqs_en
-), size = 0.5)
+wordcloud(
+  words = names(words_freqs_en),
+  freq = words_freqs_en,
+  max.words = 200,
+  random.order = FALSE,
+  colors = brewer.pal(8, "Dark2")
+)
 
 words_freqs_de <- sort(colSums(dfm_list$de), decreasing = TRUE)
 head(words_freqs_de, 20)
-wordcloud2(data.frame(
-  word = names(words_freqs_de),
-  freq = words_freqs_de
-), size = 0.5)
+wordcloud(
+  words = names(words_freqs_de),
+  freq = words_freqs_de,
+  max.words = 200,
+  random.order = FALSE,
+  colors = brewer.pal(8, "Dark2")
+)
 
-word_freqs_it <- sort(colSums(dfm_list$it), decreasing = TRUE)
-head(word_freqs_it, 20)
-wordcloud2(data.frame(
-  word = names(word_freqs_it),
-  freq = word_freqs_it
-), size = 0.5)
+words_freqs_it <- sort(colSums(dfm_list$it), decreasing = TRUE)
+head(words_freqs_it, 20)
+wordcloud(
+  words = names(words_freqs_it),
+  freq = words_freqs_it,
+  max.words = 200,
+  random.order = FALSE,
+  colors = brewer.pal(8, "Dark2")
+)
+
 # It seems that there are some english words but I think this are emojis
-word_freqs_fr <- sort(colSums(dfm_list$fr), decreasing = TRUE)
-head(word_freqs_fr, 20)
-wordcloud2(data.frame(
-  word = names(word_freqs_fr),
-  freq = word_freqs_fr
-), size = 0.5)
+words_freqs_fr <- sort(colSums(dfm_list$fr), decreasing = TRUE)
+head(words_freqs_fr, 20)
+wordcloud(
+  words = names(words_freqs_fr),
+  freq = words_freqs_fr,
+  max.words = 200,
+  random.order = FALSE,
+  colors = brewer.pal(8, "Dark2")
+)
 # University-specific Analysis
 for (uni in unique(tweets$university)) {
   # Subset tweets for the current language
-  uni_tweets <- tweets_filtered %>%
+  uni_tweets <- tweets %>%
     filter(university == uni)
 
   tokens_lang <- uni_tweets %>%
@@ -378,23 +406,42 @@ for (uni in unique(tweets$university)) {
   # Word Frequencies
   uni_word_freqs <- sort(colSums(uni_dfm), decreasing = TRUE)
   # print most common words: the emoji right are used often
-  head(uni_word_freqs, 20)
-  wordcloud2(data.frame(
-    word = names(uni_word_freqs),
-    freq = uni_word_freqs
-  ), size = 0.5)
+  print(paste("Most common words for", uni, ":"))
+  print(head(uni_word_freqs, 20))
+  print(wordcloud(
+    words = names(uni_word_freqs),
+    freq = uni_word_freqs,
+    max.words = 200,
+    random.order = FALSE,
+    colors = brewer.pal(8, "Dark2")
+  ))
 }
 ```
 ### Userreaction Analysis
-A weighted engagement metric was calculated to measure user reactions, considering both likes (favorites) and retweets, with retweets given double weight.
+To understand user reactions, the code calculates a 'weighted engagement' metric, combining favorite and retweet counts. The tweets with the highest engagement are analyzed by hour and day to identify patterns in user interaction.
 
-Posting Times of Most Engaged Tweets: The analysis of the posting times of the most engaged tweets (top 1000 by engagement) showed that:
+### Emgagement Time of Most Engaged Tweets:
 
-- The most engaged tweets were posted throughout the day, with a notable peak around mid-morning (11 AM).
-- This pattern aligns with the overall finding that users tend to be more active and engaged during typical working hours. Which can be a sign, that the users are more active during the day and not during the night. Or the customers of the universities are working also in a university or are students.
+The provided bar plots show the average engagement of tweets by hour of the day and by day of the week. Each bar represents the average engagement score for tweets posted during specific hours or on specific days.
 
-### Content of Most Engaged Tweets:
-The most common words in the most engaged tweets included "mehr" (more), "neue" (new), "schweiz" (Switzerland), "schweizer" (Swiss), "right", "heut" (today), "zeigt" (shows), "#hsluinformatik" (HSLU informatics), "studi" (study), and "zhaw". Again, "right" and similar terms are names of emojis and not actual 
+#### Peak Engagement:
+
+- The highest average engagement occurs around 20:00 (8 PM), with a significant spike.
+- Other notable peaks are at 16:00 (4 PM) and 19:00 (7 PM), showing elevated engagement during these hours.
+- Tuesday shows the highest average engagement, indicating that tweets posted on this day receive the most interaction from users.
+- Friday and Sunday also have relatively high engagement, suggesting that these days are good for posting tweets.
+
+#### Consistent Engagement:
+
+- Engagement remains relatively consistent throughout the day from 06:00 (6 AM) to 17:00 (5 PM), with moderate fluctuations.
+- Monday and Thursday show consistent engagement scores that are moderate compared to the peak days. Engagement on these days is lower than Tuesday but higher than Wednesday and Saturday.
+
+#### Lower Engagement:
+
+- There is a noticeable dip in engagement early in the morning around 00:00 (midnight) and 23:00 (11 PM).
+- Engagement is also relatively lower around 22:00 (10 PM).
+- Wednesday and Saturday have the lowest average engagement scores, indicating that tweets posted on these days receive less interaction compared to other days.
+
 ```{r}
 # Calculate a 'weighted engagement' metric
 tweets <- tweets %>%
@@ -407,19 +454,37 @@ most_engaged_tweets <- tweets %>%
   arrange(desc(weighted_engagement)) %>%
   head(1000) # Top 1000 for analysis
 
-# Analyze posting time of most engaged tweets (same as before)
-most_engaged_tweets_time <- most_engaged_tweets %>%
-  mutate(time_of_day = format(created_at, "%H"))
+# Calculate average engagement by hour
+engagement_hour <- most_engaged_tweets %>%
+  group_by(timeofday_hour) %>%
+  summarise(avg_engagement = mean(weighted_engagement, na.rm = TRUE))
 
-ggplot(most_engaged_tweets_time, aes(x = as.numeric(time_of_day))) +
-  geom_histogram(binwidth = 1, fill = "lightblue", color = "blue") +
+ggplot(engagement_hour, aes(x = timeofday_hour, y = avg_engagement)) +
+  geom_bar(stat = "identity", fill = "blue") +
   labs(
-    title = "Distribution of Posting Times for Most Engaged Tweets",
+    title = "Average Engagement by Hour",
     x = "Hour of Day",
-    y = "Frequency"
-  )
+    y = "Average Engagement"
+  ) +
+  theme_minimal()
+
+# Calculate average engagement by day
+engagement_day <- most_engaged_tweets %>%
+  group_by(day) %>%
+  summarise(avg_engagement = mean(weighted_engagement, na.rm = TRUE))
+
+# Plot average engagement by day
+ggplot(engagement_day, aes(x = day, y = avg_engagement)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  labs(
+    title = "Average Engagement by Day of the Week",
+    x = "Day of the Week",
+    y = "Average Engagement"
+  ) +
+  theme_minimal()
 ```
-Analyse the content of the most liked tweets
+### Analyse the content of the most liked tweets
+The most common words in the most liked tweets include "mehr" (more), "neue" (new), "schweiz" (Switzerland), "heut" (today), and "hochschul" (university). These words suggest that tweets focusing on new developments, events happening today, and general updates about Switzerland and universities tend to receive more likes.
 ```{r}
 # Preprocessing content of most liked tweets
 tokens_most_engaged <- most_engaged_tweets %>%
@@ -443,13 +508,15 @@ freqs_most_engaged <- sort(colSums(tokens_most_engaged_dfm), decreasing = TRUE)
 # print most common words: the emoji right are used often
 head(freqs_most_engaged, 20)
 set.seed(123)
-wordcloud2(data.frame(
-  word = names(freqs_most_engaged),
-  freq = freqs_most_engaged
-), size = 0.5)
+wordcloud(
+  words = names(freqs_most_engaged),
+  freq = freqs_most_engaged,
+  max.words = 200,
+  random.order = FALSE,
+  colors = brewer.pal(8, "Dark2")
+)
 ```
 
-The analysis indicates that Swiss Universities of Applied Sciences tweet in multiple languages, reflecting the linguistic diversity of their audience. The tweets often focus on educational themes, projects, and institutional news. User engagement is highest for tweets posted during working hours, with the most engaging content often including timely updates and relevant academic information. Recognizing the role of emojis in enhancing engagement, universities can further optimize their social media strategies to maximize reach and impact.
 ## Question 3: How do the university tweets differ in terms of content, style, emotions, etc?
 
 ### Content Analysis (Word Clouds)
@@ -498,12 +565,15 @@ for (uni in unique(tweets$university)) {
   uni_dfm <- dfm(tokens_uni)
   freqs_uni <- sort(colSums(uni_dfm), decreasing = TRUE)
   # print most common words: the emoji right are used often
-  head(freqs_uni, 20)
+  print(head(freqs_uni, 20))
   set.seed(123)
-  wordcloud2(data.frame(
-    word = names(freqs_uni),
-    freq = freqs_uni
-  ), size = 0.5)
+  print(wordcloud(
+    words = names(freqs_uni),
+    freq = freqs_uni,
+    max.words = 200,
+    random.order = FALSE,
+    colors = brewer.pal(8, "Dark2")
+  ))
 
   # Analyze Top Emojis by University
   emoji_count_per_university <- uni_tweets %>%
@@ -540,10 +610,13 @@ freqs_bi_gram <- sort(colSums(dfm_bi_gram), decreasing = TRUE)
 head(freqs_bi_gram, 20)
 # Create the bigram word cloud
 set.seed(123)
-wordcloud2(data.frame(
-  word = names(freqs_bi_gram),
-  freq = freqs_bi_gram
-), size = 0.5)
+wordcloud(
+  words = names(freqs_bi_gram),
+  freq = freqs_bi_gram,
+  max.words = 200,
+  random.order = FALSE,
+  colors = brewer.pal(8, "Dark2")
+)
 
 # Trigram Wordcloud
 tri_gram_tokens <- tokens_ngrams(tokens, n = 3)
@@ -552,12 +625,90 @@ reqs_tri_gram <- sort(colSums(dfm_tri_gram), decreasing = TRUE)
 head(reqs_tri_gram, 20)
 # Create the bigram word cloud
 set.seed(123)
-wordcloud2(data.frame(
-  word = names(reqs_tri_gram),
-  freq = reqs_tri_gram
-), size = 0.5)
+wordcloud(
+  words = names(reqs_tri_gram),
+  freq = reqs_tri_gram,
+  max.words = 200,
+  random.order = FALSE,
+  colors = brewer.pal(8, "Dark2")
+)
 ```
 ### LDA Topic Modeling
+The Latent Dirichlet Allocation (LDA) model was applied to the entire dataset of tweets to identify common topics. Here, the model with 5 topics was selected, and the top terms for each topic were extracted.
+
+#### General Topics Identified:
+
+- Topic 1: Includes terms like "student", "project", "university", "research", indicating a focus on academic and research activities.
+- Topic 2: Contains words such as "thank", "day", "great", "today", highlighting interactions and expressions of gratitude or positive events.
+- Topic 3: Features terms like "new", "event", "join", "conference", focusing on new events and invitations.
+- Topic 4: Involves terms like "technology", "innovation", "future", reflecting a focus on technology and innovation.
+- Topic 5: Includes words such as "team", "work", "support", emphasizing teamwork and support within the university community.
+
+
+#### Topic Analysis for Each University
+1. FHNW (Fachhochschule Nordwestschweiz):
+
+- Topic 1: Predominantly includes mentions of the university itself (@hsafhnw, @fhnw), and terms like "new", "today".
+- Topic 2: Focuses on academic institutions and keywords related to higher education.
+- Topic 3: Highlights the business aspect, with terms like @fhnwbusi.
+- Topic 4: Emphasizes projects and development.
+- Topic 5: Includes frequent words related to student activities.
+
+2. FH Graubünden:
+
+- Topic 1: Dominated by the term "chur" (a city) and university-related terms.
+- Topic 2: Focuses on student activities and events.
+- Topic 3: Includes media and academic-related terms.
+- Topic 4: Highlights the importance of events and information sessions.
+- Topic 5: Features terms related to regional aspects and new updates.
+
+3. ZHAW (Zurich University of Applied Sciences):
+
+- Topic 1: Centers around the university itself and related activities.
+- Topic 2: Focuses on engineering and practical applications.
+- Topic 3: Emphasizes innovation and academic pursuits.
+- Topic 4: Includes terms related to various academic disciplines and events.
+- Topic 5: Highlights events and interactions within the university.
+
+4. BFH (Bern University of Applied Sciences):
+
+- Topic 1: University-specific mentions and academic themes.
+- Topic 2: Centers around the city of Bern and university activities.
+- Topic 3: Emphasizes the broader academic community and collaborations.
+- Topic 4: Focuses on specific projects and student activities.
+- Topic 5: Highlights new developments and updates.
+
+5. HES-SO (University of Applied Sciences and Arts of Western Switzerland):
+
+- Topic 1: Emphasizes projects and academic research.
+- Topic 2: Features terms related to practical and professional applications.
+- Topic 3: Focuses on student activities and academic updates.
+- Topic 4: Highlights institutional collaborations and achievements.
+- Topic 5: Emphasizes academic projects and student interactions.
+
+6. HSLU (Lucerne University of Applied Sciences and Arts):
+
+- Topic 1: University-specific mentions, including campus and student activities.
+- Topic 2: Focuses on the city of Lucerne and related academic activities.
+- Topic 3: Centers around academic disciplines and student involvement.
+- Topic 4: Highlights digital and technological advancements.
+- Topic 5: Emphasizes institutional projects and academic achievements.
+
+7. OST-FH (Eastern Switzerland University of Applied Sciences):
+
+- Topic 1: Dominated by university-specific terms and academic activities.
+- Topic 2: Focuses on academic disciplines and regional specifics.
+- Topic 3: Centers around technology and digital advancements.
+- Topic 4: Highlights regional and institutional collaborations.
+- Topic 5: Emphasizes practical applications and institutional developments.
+
+8. SUPSI (University of Applied Sciences and Arts of Southern Switzerland):
+
+- Topic 1: Emphasizes projects and academic activities.
+- Topic 2: Centers around student activities and academic programs.
+- Topic 3: Focuses on institutional developments and updates.
+- Topic 4: Highlights specific academic disciplines and regional aspects.
+- Topic 5: Includes practical applications and collaborations.
 ```{r}
 # Source: Christoph Zangger -> löscht alle Reihen mit nur 0s
 new_dfm <- dfm_subset(dfm_list$en, ntoken(dfm_list$en) > 0)
@@ -583,9 +734,10 @@ top_terms %>%
   scale_y_reordered() +
   labs(
     x = "Beta (Term Importance within Topic)",
-    y = NULL,
+    y = "Terms",
     title = "Top Terms per Topic in Tweets (LDA)"
-  )
+  ) +
+  theme_minimal()
 
 # Most different words among topics (using log ratios)
 diff <- topic_terms %>%
@@ -604,7 +756,7 @@ universities <- unique(tweets$university)
 
 for (uni in universities) {
   # Filter tweets for the current university
-  uni_tweets <- tweets %>% filter(university == uni)
+  uni_tweets <- tweets %>% filter(university == uni & lang %in% langs)
 
   tokens_uni <- uni_tweets %>%
     corpus(text_field = "full_text_emojis") %>%
@@ -652,6 +804,9 @@ for (uni in universities) {
   print(as.data.frame(terms(tweet_lda, 10)))
 }
 ```
+#### Conclusion:
+The LDA analysis reveals distinct topics across all tweets, emphasizing academic activities, events, and institutional developments. Each university exhibits unique themes, reflecting their individual focus areas and regional characteristics. This detailed topic modeling helps understand the primary subjects of interest and communication patterns across different Swiss universities of applied sciences.
+
 ### Style Analysis
 The distribution of tweet lengths shows variation across universities. Most tweets are concise, aligning with Twitter's character limit, but the exact length distribution differs among institutions. It is interesting to see that much tweets have around 150 words and that the tweets from the universities are not that long. It is a typical sign that the tweets are not that long and this is a common thing in social media.
 ```{r}
@@ -685,45 +840,61 @@ langs <- c("de", "fr", "it", "en")
 tweets_filtered <- tweets %>%
   filter(lang %in% langs)
 
-# TODO: because sentiment only works for english
-# Create Function to Get Syuzhet Sentiment
-get_syuzhet_sentiment <- function(text, lang) {
-  # Check if language is supported
-  if (lang %in% langs) {
-    return(get_sentiment(text, method = "syuzhet", lang = lang))
+# Function to get sentiment based on language
+get_multilang_sentiment <- function(text, lang) {
+  if (lang == "de") {
+    return(get_sentiment(text, method = "nrc", language = "german"))
+  } else if (lang == "it") {
+    return(get_sentiment(text, method = "nrc", language = "italian"))
+  } else if (lang == "fr") {
+    return(get_sentiment(text, method = "nrc", language = "french"))
+  } else if (lang == "en") {
+    return(get_sentiment(text, method = "syuzhet"))
   } else {
     return(NA) # Return NA for unsupported languages
   }
 }
-
 # Calculate Syuzhet Sentiment for each Tweet
 tweets_filtered$sentiment <-
-  mapply(get_syuzhet_sentiment, tweets_filtered$full_text, tweets_filtered$lang)
+  mapply(
+    get_multilang_sentiment,
+    tweets_filtered$full_text, tweets_filtered$lang
+  )
 
 plot_data <- tweets_filtered %>%
   group_by(university, month) %>%
-  summarize(mean_sentiment_syuzhet = mean(sentiment, na.rm = TRUE))
+  summarize(mean_sentiment = mean(sentiment, na.rm = TRUE))
 
-# Plot Syuzhet Sentiment by all Universities
+# Convert month to Date format
+plot_data <- plot_data %>%
+  mutate(month = as.Date(month, format = "%Y-%m-%d"))
+
+# Plot Sentiment by all Universities
 ggplot(plot_data, aes(
   x = month,
-  y = mean_sentiment_syuzhet,
+  y = mean_sentiment,
   color = university, group = university
 )) +
   geom_line() +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
   labs(
-    title = "Mean Syuzhet Sentiment Over Time by University",
-    y = "Mean Sentiment Score"
+    title = "Mean Sentiment Over Time by University",
+    y = "Mean Sentiment Score",
+    x = "Month"
   ) +
-  scale_x_datetime(date_breaks = "1 month", date_labels = "%Y-%m") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  scale_x_date(date_breaks = "1 month", date_labels = "%Y-%m") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_minimal()
 
-for (uni in unique(tweets$university)) {
-  uni_tweets <- tweets %>%
-    filter(university == uni, lang == "en")
+for (uni in unique(tweets_filtered$university)) {
+  most_used_lang <- tweets %>%
+    filter(university == uni) %>%
+    count(lang) %>%
+    slice_max(n = 1, order_by = n) %>%
+    pull(lang)
 
-  uni_tweets$sentiment <-
-    mapply(get_syuzhet_sentiment, uni_tweets$full_text, uni_tweets$lang)
+  uni_tweets <- tweets_filtered %>%
+    filter(university == uni & lang == most_used_lang)
 
   plot_data <- uni_tweets %>%
     group_by(month) %>%
@@ -739,53 +910,57 @@ for (uni in unique(tweets$university)) {
       x = "Month"
     ))
 
-  # Did not found a way to get the sentiment from the tweets for each language so I will use the full_text_emojis column and detect the language of the words only in german
   # Tokenize and Preprocess Words
-  uni_words_en <- uni_tweets %>%
+  uni_words <- uni_tweets %>%
     unnest_tokens(word, full_text_emojis) %>%
-    anti_join(get_stopwords(language = "en"), by = "word") %>%
-    distinct() %>%
     filter(nchar(word) > 3) %>%
     filter(!str_detect(word, "\\d")) %>%
     filter(!str_detect(word, "https?://\\S+|www\\.\\S+|t\\.co|http|https"))
 
+  # Remove stopwords after counting word frequency
+  word_counts <- uni_words %>%
+    count(word, sort = TRUE) %>%
+    anti_join(get_stopwords(language = most_used_lang), by = "word")
 
-  sentiment_words_en <- uni_words_en %>%
-    mutate(
-      sentiment = get_sentiment(word, method = "syuzhet")
-    )
+  sentiment_words <- word_counts %>%
+    mutate(sentiment = get_multilang_sentiment(word, most_used_lang))
 
   # Separate Positive and Negative Words
-  positive_words_en <- sentiment_words_en %>%
+  positive_words <- sentiment_words %>%
     filter(sentiment >= 0) %>%
-    count(word, sort = TRUE) %>%
+    arrange(desc(n)) %>%
     rename(freq = n)
 
-  negative_words_en <- sentiment_words_en %>%
+  negative_words <- sentiment_words %>%
     filter(sentiment < 0) %>%
-    count(word, sort = TRUE) %>%
+    arrange(desc(n)) %>%
     rename(freq = n)
 
   # Create and Display Word Clouds
-  # positive words
-  print(paste0("Positive words for: ", uni))
-  print(head(positive_words_en, 20))
-  print(wordcloud2(data.frame(
-    word = positive_words_en$word,
-    freq = positive_words_en$freq
-  ), size = 0.5))
+  print(paste0("Positive words for: ", uni, " in ", most_used_lang))
+  print(head(positive_words, 20))
+  wordcloud(
+    words = positive_words$word,
+    freq = positive_words$freq,
+    max.words = 200,
+    random.order = FALSE,
+    colors = brewer.pal(8, "Dark2")
+  )
 
-  print(paste0("Negative words for: ", uni))
-  print(head(negative_words_en, 20))
-  # negative words
-  print(wordcloud2(data.frame(
-    word = negative_words_en$word,
-    freq = negative_words_en$freq
-  ), size = 0.5))
+  print(paste0("Negative words for: ", uni, " in ", most_used_lang))
+  print(head(negative_words, 20))
+  wordcloud(
+    words = negative_words$word,
+    freq = negative_words$freq,
+    max.words = 200,
+    random.order = FALSE,
+    colors = brewer.pal(8, "Dark2")
+  )
 }
 ```
 ### Conclusion:
 The analysis indicates that Swiss Universities of Applied Sciences exhibit diverse tweeting patterns in terms of content, style, and emotions. Tweets often focus on academic achievements, projects, and institutional news, with varying emotional tones across different universities. Recognizing these patterns can help universities optimize their social media strategies to better engage with their audiences.
+
 ## Question 4: What specific advice can you give us as communication department of BFH based on your analysis? How can we integrate the analysis of tweets in our internal processes, can you think of any data products that would be of value for us?
 
 The comprehensive analysis of BFH's tweets reveals several insights that can be leveraged to enhance the communication strategy.
@@ -807,13 +982,55 @@ tweets %>%
 
 # Emoji Analysis
 emoji_count <- tweets %>%
+  filter(university == "bfh") %>%
   top_n_emojis(full_text)
 
 emoji_count %>%
   mutate(emoji_name = reorder(emoji_name, n)) %>%
   ggplot(aes(n, emoji_name)) +
-  geom_col() +
-  labs(x = "Count", y = NULL, title = "Top 20 Emojis Used")
+  geom_col(fill = "#37556E") +
+  labs(
+    x = "Count",
+    y = "Emoji",
+    title = "Top 20 Emojis Used by BFH"
+  ) +
+  theme_minimal()
+
+heatmap_data_bfh <- tweets %>%
+  filter(university == "bfh") %>%
+  count(day, timeofday_hour) %>%
+  complete(day, timeofday_hour, fill = list(n = 0))
+
+ggplot(heatmap_data_bfh, aes(x = timeofday_hour, y = day, fill = n)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "lightblue", high = "darkblue") +
+  labs(title = "Heatmap of Tweet Activity", x = "Hour", y = "Day") +
+  theme_minimal()
+
+engagement_hour_bfh <- tweets %>%
+  filter(university == "bfh") %>%
+  group_by(timeofday_hour) %>%
+  summarise(avg_engagement = mean(weighted_engagement, na.rm = TRUE))
+
+ggplot(engagement_hour, aes(x = timeofday_hour, y = avg_engagement)) +
+  geom_bar(stat = "identity", fill = "#37556E") +
+  labs(title = "Average Engagement by Hour", x = "Hour", y = "Avg Engagement") +
+  theme_minimal()
+
+plot_data_bfh <- tweets_filtered %>%
+  filter(university == "bfh") %>%
+  group_by(month) %>%
+  summarize(mean_sentiment = mean(sentiment, na.rm = TRUE))
+
+ggplot(plot_data_bfh, aes(x = month, y = mean_sentiment)) +
+  geom_line() +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  labs(
+    title = "Mean Syuzhet Sentiment Over Time by BFH",
+    y = "Mean Sentiment Score",
+    x = "Month"
+  ) +
+  theme_minimal()
 
 insights <- list(
   "Most Active Hours" = hours_with_most_tweets_by_uni,
@@ -834,6 +1051,12 @@ Sentiment analysis indicates the emotional tone of the tweets, helping tailor co
 4. Implement Topic Modeling:
 Topic modeling reveals the key themes prevalent in the tweets. For BFH, topics often include academic projects, student updates, and digital initiatives. Aligning the communication strategy to emphasize these themes can enhance relevance and engagement. Regularly updating the communication team on trending topics can help keep the content aligned with audience interests.
 
+### Best posting time:
+Optimal Posting Times: The best times to post tweets for maximum engagement are around 4 PM and 8 PM. Posting during these hours is likely to result in higher interactions.
+Optimal Posting Days: The best days to post tweets for maximum engagement are Tuesday, Friday, and Sunday. Tweets posted on these days are likely to receive more likes and retweets.
+Consistent Engagement: Tweets posted during the day (06:00 to 17:00) and on Monday and Thursday receive consistent engagement, making these reliable times for posting content.
+Avoid Low Engagement Times and Days: Avoid posting late at night, especially around midnight and late evening, as well as on Wednesday and Saturday, as these times and days show the lowest interaction levels.
+
 ### Integrating Tweet Analysis into Internal Processes:
 To fully leverage these insights, the BFH communication department can integrate tweet analysis into their regular workflow:
 1. Real-Time Analytics Dashboard: Implement a dashboard that tracks tweet performance, including engagement metrics, sentiment scores, and topic trends. This allows for real-time adjustments to the communication strategy.
@@ -846,5 +1069,65 @@ To further enhance the communication strategy, BFH can consider developing data 
 1. Engagement Prediction Tool: A tool that predicts the best times to tweet based on historical data, optimizing tweet scheduling for maximum engagement.
 2. Sentiment Analysis Bot: An automated system that analyzes the sentiment of drafts before they are posted, ensuring that the tone is appropriate and likely to generate positive reactions.
 3. Trend Tracker: A feature that identifies emerging topics and trends in real-time, allowing the communication team to quickly adapt and incorporate relevant themes into their messaging.
+
+By integrating these recommendations and tools, BFH can enhance its communication strategy, ensuring that its messages are timely, relevant, and engaging for its audience.
+
+Based on the following insights and recommendations, we can enhance the communication strategy and leverage tweet analysis for better engagement with customers of the BFH.
+
+### Key Insights:
+
+#### 1. Language and Emoji Usage:
+- **Language**: BFH predominantly tweets in German, with 3008 tweets in this language.
+- **Emojis**: Commonly used emojis include 🎓 (graduation cap), 🚀 (rocket), and 👉 (backhand index pointing right). These emojis often signify academic achievements and growth.
+
+#### 2. Optimal Posting Times and Days:
+- **Most Active Hours**: The analysis revealed that 8 AM is the most active hour for BFH tweets. However, tweets posted around 4 PM and 8 PM tend to receive higher engagement.
+- **Most Active Days**: Tuesday is the most active day for BFH tweets. This suggests that significant announcements and updates should be scheduled on Tuesdays for maximum visibility and interaction.
+
+#### 3. Content and Sentiment Analysis:
+- **Content Themes**: Frequent words in BFH tweets include "Bern", "Projekt" (project), and "Hochschul" (university). This indicates a focus on academic projects and institutional updates.
+- **Sentiment**: Positive words often relate to academic achievements and successful projects, while negative words relate to challenges and competitions.
+
+#### 4. Engagement Patterns:
+- **Peak Engagement**: The highest average engagement occurs around 8 PM, with notable peaks at 4 PM and 7 PM.
+- **Consistent Engagement**: Engagement remains relatively consistent from 6 AM to 5 PM, with moderate fluctuations.
+
+### Recommendations:
+
+#### 1. Optimize Tweet Release Times:
+Schedule tweets during the most active hours (8 AM, 4 PM, and 8 PM) to maximize engagement. Consider aligning important announcements and updates with these times for better visibility.
+
+#### 2. Focus on Specific Days:
+Leverage Tuesdays for critical updates and major announcements to take advantage of the higher activity levels. Additionally, posting on Fridays and Sundays can also result in higher engagement.
+
+#### 3. Content Strategy:
+- **Emphasize Positive Themes**: Highlight student achievements, successful projects, and positive institutional news to generate positive reactions.
+- **Leverage Emoji Usage**: Use popular emojis like 🎓 and 🚀 to enhance tweet visibility and engagement.
+- **Utilize Topic Insights**: Emphasize key themes such as academic projects, student updates, and digital initiatives to align content with audience interests.
+
+### Integrating Tweet Analysis into Internal Processes:
+
+#### 1. Real-Time Analytics Dashboard:
+Implement a dashboard to track tweet performance, including engagement metrics, sentiment scores, and trending topics. This allows for real-time adjustments to the communication strategy.
+
+#### 2. Scheduled Reports:
+Generate weekly or monthly reports summarizing key metrics and insights. This helps the team stay informed about content performance and areas for improvement.
+
+#### 3. Content Calendar:
+Develop a content calendar that aligns tweet releases with peak engagement times and days. Incorporate findings from sentiment and topic analyses to plan relevant and engaging content.
+
+#### 4. Feedback Loop:
+Establish a feedback loop where the communication team reviews analytics data and adjusts the strategy accordingly. Regular team meetings to discuss insights can foster a data-driven approach to communication.
+
+### Potential Data Products:
+
+#### 1. Engagement Prediction Tool:
+Develop a tool that predicts the best times to tweet based on historical data, optimizing tweet scheduling for maximum engagement.
+
+#### 2. Sentiment Analysis Bot:
+Implement an automated system to analyze the sentiment of drafts before posting, ensuring an appropriate and positive tone.
+
+#### 3. Trend Tracker:
+Create a feature that identifies emerging topics and trends in real-time, allowing the communication team to quickly adapt and incorporate relevant themes into their messaging.
 
 By integrating these recommendations and tools, BFH can enhance its communication strategy, ensuring that its messages are timely, relevant, and engaging for its audience.
