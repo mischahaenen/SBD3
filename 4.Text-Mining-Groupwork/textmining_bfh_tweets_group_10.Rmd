@@ -1039,41 +1039,6 @@ insights <- list(
   "Sentiment Analysis" = head(tweets_filtered$sentiment)
 )
 ```
-
-### Recommendations:
-Based on the analysis, the following recommendations can be made to enhance BFH's communication strategy:
-1. Optimize Tweet Release Times:
-Based on the analysis of tweet activity, the most active hours for BFH are typically in the morning. Focusing on releasing tweets during these peak hours can maximize engagement. Scheduling important announcements and updates during these times will likely yield better visibility and interaction.
-2. Focus on Specific Days for Announcements:
-The analysis shows that Tuesday is the most active day for BFH tweets. Leveraging this day for critical updates and major announcements can ensure they reach a wider audience. Aligning content release schedules with these high-activity days can enhance communication effectiveness.
- Sentiment Analysis:
-Sentiment analysis indicates the emotional tone of the tweets, helping tailor content to resonate positively with the audience. By understanding which types of tweets generate positive reactions, the communication team can craft messages that are more likely to be well-received. This could involve highlighting student achievements, successful projects, and positive institutional news.
-4. Implement Topic Modeling:
-Topic modeling reveals the key themes prevalent in the tweets. For BFH, topics often include academic projects, student updates, and digital initiatives. Aligning the communication strategy to emphasize these themes can enhance relevance and engagement. Regularly updating the communication team on trending topics can help keep the content aligned with audience interests.
-
-### Best posting time:
-Optimal Posting Times: The best times to post tweets for maximum engagement are around 4 PM and 8 PM. Posting during these hours is likely to result in higher interactions.
-Optimal Posting Days: The best days to post tweets for maximum engagement are Tuesday, Friday, and Sunday. Tweets posted on these days are likely to receive more likes and retweets.
-Consistent Engagement: Tweets posted during the day (06:00 to 17:00) and on Monday and Thursday receive consistent engagement, making these reliable times for posting content.
-Avoid Low Engagement Times and Days: Avoid posting late at night, especially around midnight and late evening, as well as on Wednesday and Saturday, as these times and days show the lowest interaction levels.
-
-### Integrating Tweet Analysis into Internal Processes:
-To fully leverage these insights, the BFH communication department can integrate tweet analysis into their regular workflow:
-1. Real-Time Analytics Dashboard: Implement a dashboard that tracks tweet performance, including engagement metrics, sentiment scores, and topic trends. This allows for real-time adjustments to the communication strategy.
-2. Scheduled Reports: Generate weekly or monthly reports summarizing key metrics and insights. This helps the team stay informed about what content is performing well and where improvements can be made.
-3. Content Calendar: Develop a content calendar that aligns tweet releases with peak engagement times and days. Incorporate findings from sentiment and topic analyses to plan content that resonates with the audience.
-4. Feedback Loop: Establish a feedback loop where the communication team reviews analytics data and adjusts the strategy accordingly. Regular team meetings to discuss these insights can foster a more data-driven approach to communication.
-
-### Potential Data Products:
-To further enhance the communication strategy, BFH can consider developing data products that provide additional value:
-1. Engagement Prediction Tool: A tool that predicts the best times to tweet based on historical data, optimizing tweet scheduling for maximum engagement.
-2. Sentiment Analysis Bot: An automated system that analyzes the sentiment of drafts before they are posted, ensuring that the tone is appropriate and likely to generate positive reactions.
-3. Trend Tracker: A feature that identifies emerging topics and trends in real-time, allowing the communication team to quickly adapt and incorporate relevant themes into their messaging.
-
-By integrating these recommendations and tools, BFH can enhance its communication strategy, ensuring that its messages are timely, relevant, and engaging for its audience.
-
-Based on the following insights and recommendations, we can enhance the communication strategy and leverage tweet analysis for better engagement with customers of the BFH.
-
 ### Key Insights:
 
 #### 1. Language and Emoji Usage:
