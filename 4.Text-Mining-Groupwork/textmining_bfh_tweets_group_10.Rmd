@@ -23,6 +23,7 @@ library(cld3)
 library(tidyEmoji)
 library(dplyr)
 library(reshape2)
+library(entropy)
 ```
 Load the tweets and check if they are loaded correctly. We also check the summary for a first interpretation. The summary(tweets) output reveals the following:
 
@@ -37,7 +38,7 @@ Load the tweets and check if they are loaded correctly. We also check the summar
 # setwd("./data/")
 
 # Load data
-load("../data/Tweets_all.rda")
+load("./Tweets_all.rda")
 
 # Check that tweets are loaded
 head(tweets)
@@ -109,10 +110,6 @@ There isn't a consistent "most active day" across universities. Some favor weekd
 - SUPSI-CH: Friday
 
 The pattern also suggests that tweet activity tends to be higher earlier in the week, with motivation and tweet frequency potentially falling as the week progresses.
-
-### Release Strategies:
-strategy and perhaps a more reactive approach to current events or trends.
-While universities have peak hours and days, the intervals between tweets vary significantly, indicating a more reactive strategy rather than a rigid release schedule. This variability suggests that the universities might be responding to real-time events or trends rather than sticking to a strict posting schedule.
 
 ```{r}
 # Count each tweet by university and hour of the day
@@ -204,13 +201,24 @@ ggplot(heatmap_data, aes(x = timeofday_hour, y = day, fill = n)) +
     fill = "Number of Tweets"
   ) +
   theme_minimal()
+```
 
-# Calculate time intervals between tweets
-find_mode <- function(x) {
-  ux <- unique(x)
-  ux[which.max(tabulate(match(x, ux)))]
-}
+### Release Strategies:
+While universities have peak hours and days, the intervals between tweets vary significantly, indicating a more reactive strategy rather than a rigid release schedule. This variability suggests that the universities might be responding to real-time events or trends rather than sticking to a strict posting schedule.
 
+#### Dispersion Measures and Analysis
+To further understand the dispersion of tweets, we analyzed the time intervals between tweets using measures like the mean interval, standard deviation, and entropy. Understanding the variability helps in assessing how consistent or sporadic the posting behavior is. High variability indicates that the university does not follow a strict schedule and posts at irregular intervals, which could be a sign of a more reactive approach to social media. Higher entropy suggests less predictability in tweet timing, indicating a more dynamic and responsive posting strategy. This is crucial for understanding how universities might be reacting to real-time events or trends rather than following a predetermined schedule.Here are the results for selected universities:
+
+- **FHNW**: Significant variability in mean intervals (1291 to 6994 minutes) and stable entropy with higher values in some years, indicating fluctuating engagement and reactive posting at times.
+- **FH Graubünden**: High variability in mean intervals, notably increasing in 2023 (13889 minutes). Entropy peaks in 2021 (2.78), suggesting a highly reactive posting strategy.
+- **ZHAW**: Fluctuating mean intervals, with a significant increase in 2023 (35371 minutes). High entropy in 2020 (2.38), indicating dynamic and reactive posting periods.
+- **BFH**: Generally stable mean intervals with minor fluctuations. Entropy shows varying predictability, indicating a mix of stable and responsive tweeting.
+- **HES-SO**: High variability in mean intervals, especially in earlier years. Generally stable entropy with some fluctuations, indicating a mix of consistent and reactive posting.
+- **HSLU**: Fluctuating mean intervals with a decrease in 2021. Entropy indicates varying unpredictability, suggesting a mix of consistent and reactive posting.
+- **OST-FH**: Higher mean intervals in 2021 and 2022, indicating less frequent posting. High variability in entropy, particularly in 2022, suggesting flexible posting behavior.
+- **SUPSI-CH**: Significant fluctuations in mean intervals over the years. High entropy in 2020, indicating a dynamic and reactive posting strategy.
+
+```{r}
 tweets <- tweets %>%
   arrange(university, created_at) %>%
   group_by(university) %>%
@@ -218,58 +226,84 @@ tweets <- tweets %>%
     difftime(created_at, lag(created_at), units = "mins")
   ))
 
-# Descriptive statistics of time intervals
-summary(tweets$time_interval)
-
-# Pilot distribution of time intervals between tweets for each year
+# Plotting the time intervals
 universities <- unique(tweets$university)
 for (uni in universities) {
-  uni <- "bfh"
-  # Filter data for the specific university
   uni_filtered_data <- tweets %>%
     filter(university == uni)
-  # Calculate mode (most common interval) in hours
 
+  # Plot the distribution of time intervals
   print(ggplot(uni_filtered_data, aes(x = time_interval)) +
-    geom_histogram(fill = "lightblue") +
+    geom_histogram(fill = "lightblue", bins = 30) +
     facet_wrap(~year) +
     labs(
-      title = paste0(
-        "Distribution of time intervals between years - ", uni
-      ),
+      title = paste0("Distribution of time intervals between tweets - ", uni),
       x = "Time interval (minutes)",
       y = "Tweet count"
     ))
 
-  for (curr_year in unique(uni_filtered_data$year)) {
-    # Filter data for the specific year
-    year_filtered_data <- uni_filtered_data %>%
-      filter(year(created_at) == curr_year)
+  # Plot posting day for each year for university because a intervall could be "short" but when a university only posts twice a year it seems active but it is actually not
+  tweet_counts <- uni_filtered_data %>%
+    group_by(tweet_month) %>%
+    summarise(tweet_count = n())
+  print("Tweet count for each month")
+  print(ggplot(tweet_counts, aes(x = tweet_month, y = tweet_count)) +
+    geom_line(color = "#F9C301") +
+    geom_point(color = "#37556E", size = 3) +
+    scale_x_date(date_labels = "%b %Y", date_breaks = "1 month") +
+    labs(
+      title = "Monthly Tweet Activity",
+      x = "Month",
+      y = "Tweet Count"
+    ) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)))
 
-    print(paste0(
-      toupper(uni), " posted a total of ",
-      nrow(year_filtered_data), " tweets in ", curr_year
-    ))
-    most_common_interval_minutes <- find_mode(year_filtered_data$time_interval)
-    most_common_interval_hours <- most_common_interval_minutes / 60
-    print(paste0(
-      "Most common time interval for ", uni,
-      " in ",
-      curr_year,
-      " is ", most_common_interval_minutes,
-      " minutes (", most_common_interval_hours, " hours)"
-    ))
-  }
+  # Calculate dispersion measures for time intervals
+  dispersion_measures <- uni_filtered_data %>%
+    group_by(year) %>%
+    summarise(
+      mean_interval = mean(time_interval, na.rm = TRUE),
+      sd_interval = sd(time_interval, na.rm = TRUE),
+      entropy_interval = entropy::entropy(discretize(time_interval,
+        numBins = 30, r = range(time_interval, na.rm = TRUE)
+      ))
+    )
+
+  print(paste("Dispersion measures for", uni))
+  print(dispersion_measures)
+
+  # Line plot for mean interval and standard deviation over the years
+  print(ggplot(dispersion_measures, aes(x = year)) +
+    geom_line(aes(y = mean_interval, color = "Mean Interval")) +
+    geom_point(aes(y = mean_interval, color = "Mean Interval")) +
+    geom_line(aes(y = sd_interval, color = "Standard Deviation")) +
+    geom_point(aes(y = sd_interval, color = "Standard Deviation")) +
+    scale_y_continuous(sec.axis = dup_axis()) +
+    labs(
+      title = "Mean Interval and Standard Deviation of Tweet Intervals Over Years",
+      x = "Year",
+      y = "Minutes",
+      color = "Measure"
+    ) +
+    theme_minimal())
+
+  print(ggplot(dispersion_measures, aes(x = year)) +
+    geom_line(aes(y = entropy_interval, color = "Entropy Interval")) +
+    geom_point(aes(y = entropy_interval, color = "Entropy Interval")) +
+    scale_y_continuous(sec.axis = dup_axis()) +
+    labs(
+      title = "Entropy of Tweet Intervals Over Years",
+      x = "Year",
+      y = "Entropy"
+    ) +
+    theme_minimal())
 }
+
+# Descriptive statistics of time intervals
+summary(tweets$time_interval)
 ```
-
-### Overall Trends:
-
-- Most Common Time Interval for Tweets: The time intervals between tweets also vary widely among the universities, with some universities having very frequent posts (every few minutes) while others have longer intervals (several hours or even days).
-- Most Active Hour Overall: Across all universities, 11 AM is the most common hour for tweets, with a total of 2356 tweets posted at this time.
-
 ### Conclusion:
-The data indicates that Swiss Universities of Applied Sciences primarily tweet during working hours and show distinct patterns in their most active days and hours. Workers tend to be more productive and active on Twitter in the morning, with a noticeable decline in activity around midday and towards the end of the week. This data-driven approach to analyzing Twitter activity can help universities optimize their social media strategies by identifying the best times and days to engage their audiences.
+The data indicates that Swiss Universities of Applied Sciences primarily tweet during working hours and show distinct patterns in their most active days and hours. Workers tend to be more productive and active on Twitter in the morning, with a noticeable decline in activity around midday and towards the end of the week. The dispersion measures support this interpretation, showing varying levels of unpredictability across different years and universities.
 
 ## Question 2: What are the tweets about and how do other Twitter users react to them (likes, etc.)?
 
@@ -408,13 +442,13 @@ for (uni in unique(tweets$university)) {
   # print most common words: the emoji right are used often
   print(paste("Most common words for", uni, ":"))
   print(head(uni_word_freqs, 20))
-  print(wordcloud(
+  wordcloud(
     words = names(uni_word_freqs),
     freq = uni_word_freqs,
     max.words = 200,
     random.order = FALSE,
     colors = brewer.pal(8, "Dark2")
-  ))
+  )
 }
 ```
 ### Userreaction Analysis
@@ -565,20 +599,21 @@ for (uni in unique(tweets$university)) {
   uni_dfm <- dfm(tokens_uni)
   freqs_uni <- sort(colSums(uni_dfm), decreasing = TRUE)
   # print most common words: the emoji right are used often
+  print(paste("Most common words for", uni, ":"))
   print(head(freqs_uni, 20))
   set.seed(123)
-  print(wordcloud(
+  wordcloud(
     words = names(freqs_uni),
     freq = freqs_uni,
     max.words = 200,
     random.order = FALSE,
     colors = brewer.pal(8, "Dark2")
-  ))
+  )
 
   # Analyze Top Emojis by University
   emoji_count_per_university <- uni_tweets %>%
     top_n_emojis(full_text)
-
+  print(paste("Top emojis for", uni, ":"))
   print(emoji_count_per_university)
 
   emoji_count_per_university %>%
