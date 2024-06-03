@@ -191,13 +191,13 @@ heatmap_data <- tweets %>%
   ungroup()
 
 # Plot heatmap and we can see clearly that the most tweets are posted during the working hours from monday to friday
-ggplot(heatmap_data, aes(x = timeofday_hour, y = day, fill = n)) +
+ggplot(heatmap_data, aes(x = day, y = timeofday_hour, fill = n)) +
   geom_tile(color = "white") +
   scale_fill_gradient(low = "lightblue", high = "darkblue") +
   labs(
     title = "Heatmap of Tweet Activity by Hour and Day",
-    x = "Hour of Day",
-    y = "Day of the Week",
+    x = "Day",
+    y = "Hour",
     fill = "Number of Tweets"
   ) +
   theme_minimal()
@@ -315,6 +315,7 @@ Next, the code processes tweets separately for each language. This involves crea
 langs <- c("de", "fr", "it", "en")
 tweets_filtered <- tweets %>%
   filter(lang %in% langs)
+
 # Define extended stopwords (outside loop for efficiency)
 # Remove 'amp' as it is not meaningful because its only & symbol
 # Remove 'rt' because it is an word e.g 'engagiert'.
@@ -451,6 +452,7 @@ for (uni in unique(tweets$university)) {
   )
 }
 ```
+
 ### Userreaction Analysis
 To understand user reactions, the code calculates a 'weighted engagement' metric, combining favorite and retweet counts. The tweets with the highest engagement are analyzed by hour and day to identify patterns in user interaction.
 
@@ -517,6 +519,7 @@ ggplot(engagement_day, aes(x = day, y = avg_engagement)) +
   ) +
   theme_minimal()
 ```
+
 ### Analyse the content of the most liked tweets
 The most common words in the most liked tweets include "mehr" (more), "neue" (new), "schweiz" (Switzerland), "heut" (today), and "hochschul" (university). These words suggest that tweets focusing on new developments, events happening today, and general updates about Switzerland and universities tend to receive more likes.
 ```{r}
@@ -609,7 +612,6 @@ for (uni in unique(tweets$university)) {
     random.order = FALSE,
     colors = brewer.pal(8, "Dark2")
   )
-
   # Analyze Top Emojis by University
   emoji_count_per_university <- uni_tweets %>%
     top_n_emojis(full_text)
@@ -668,82 +670,20 @@ wordcloud(
   colors = brewer.pal(8, "Dark2")
 )
 ```
+
 ### LDA Topic Modeling
 The Latent Dirichlet Allocation (LDA) model was applied to the entire dataset of tweets to identify common topics. Here, the model with 5 topics was selected, and the top terms for each topic were extracted.
 
 #### General Topics Identified:
 
-- Topic 1: Includes terms like "student", "project", "university", "research", indicating a focus on academic and research activities.
-- Topic 2: Contains words such as "thank", "day", "great", "today", highlighting interactions and expressions of gratitude or positive events.
-- Topic 3: Features terms like "new", "event", "join", "conference", focusing on new events and invitations.
-- Topic 4: Involves terms like "technology", "innovation", "future", reflecting a focus on technology and innovation.
-- Topic 5: Includes words such as "team", "work", "support", emphasizing teamwork and support within the university community.
+- Topic 1: Includes terms like "student", "project", "innov", "scienc", indicating a focus on academic and research activities.
+- Topic 2: Contains words such as "thank", "welcome", "now", "today", highlighting interactions and expressions of gratitude or positive events.
+- Topic 3: Features terms like "student", "research", "switzerland", "new", focusing also on academic and research activities.
+- Topic 4: Involves terms like "digit", "univers", "day" this handlea also about academic and research activities but also about digitalization.
+- Topic 5: Includes words such as "new", "student", "present", "conf", emphasizing new developments, student activities, and events or conferences.
 
+It seems that these topics are not that far apart, which could indicate that the tweets are quite similar in content and style. The LDA model still shows us that topics like academic and research activities, student activities, and new developments are relevant in the tweets.
 
-#### Topic Analysis for Each University
-1. FHNW (Fachhochschule Nordwestschweiz):
-
-- Topic 1: Predominantly includes mentions of the university itself (@hsafhnw, @fhnw), and terms like "new", "today".
-- Topic 2: Focuses on academic institutions and keywords related to higher education.
-- Topic 3: Highlights the business aspect, with terms like @fhnwbusi.
-- Topic 4: Emphasizes projects and development.
-- Topic 5: Includes frequent words related to student activities.
-
-2. FH Graubünden:
-
-- Topic 1: Dominated by the term "chur" (a city) and university-related terms.
-- Topic 2: Focuses on student activities and events.
-- Topic 3: Includes media and academic-related terms.
-- Topic 4: Highlights the importance of events and information sessions.
-- Topic 5: Features terms related to regional aspects and new updates.
-
-3. ZHAW (Zurich University of Applied Sciences):
-
-- Topic 1: Centers around the university itself and related activities.
-- Topic 2: Focuses on engineering and practical applications.
-- Topic 3: Emphasizes innovation and academic pursuits.
-- Topic 4: Includes terms related to various academic disciplines and events.
-- Topic 5: Highlights events and interactions within the university.
-
-4. BFH (Bern University of Applied Sciences):
-
-- Topic 1: University-specific mentions and academic themes.
-- Topic 2: Centers around the city of Bern and university activities.
-- Topic 3: Emphasizes the broader academic community and collaborations.
-- Topic 4: Focuses on specific projects and student activities.
-- Topic 5: Highlights new developments and updates.
-
-5. HES-SO (University of Applied Sciences and Arts of Western Switzerland):
-
-- Topic 1: Emphasizes projects and academic research.
-- Topic 2: Features terms related to practical and professional applications.
-- Topic 3: Focuses on student activities and academic updates.
-- Topic 4: Highlights institutional collaborations and achievements.
-- Topic 5: Emphasizes academic projects and student interactions.
-
-6. HSLU (Lucerne University of Applied Sciences and Arts):
-
-- Topic 1: University-specific mentions, including campus and student activities.
-- Topic 2: Focuses on the city of Lucerne and related academic activities.
-- Topic 3: Centers around academic disciplines and student involvement.
-- Topic 4: Highlights digital and technological advancements.
-- Topic 5: Emphasizes institutional projects and academic achievements.
-
-7. OST-FH (Eastern Switzerland University of Applied Sciences):
-
-- Topic 1: Dominated by university-specific terms and academic activities.
-- Topic 2: Focuses on academic disciplines and regional specifics.
-- Topic 3: Centers around technology and digital advancements.
-- Topic 4: Highlights regional and institutional collaborations.
-- Topic 5: Emphasizes practical applications and institutional developments.
-
-8. SUPSI (University of Applied Sciences and Arts of Southern Switzerland):
-
-- Topic 1: Emphasizes projects and academic activities.
-- Topic 2: Centers around student activities and academic programs.
-- Topic 3: Focuses on institutional developments and updates.
-- Topic 4: Highlights specific academic disciplines and regional aspects.
-- Topic 5: Includes practical applications and collaborations.
 ```{r}
 # Source: Christoph Zangger -> löscht alle Reihen mit nur 0s
 new_dfm <- dfm_subset(dfm_list$en, ntoken(dfm_list$en) > 0)
@@ -756,9 +696,11 @@ topics <- as.data.frame(terms(tweet_lda, 50)) # First fifty words per topic
 # Extract top terms per topic
 top_terms <- topic_terms %>%
   group_by(topic) %>%
-  top_n(8, beta) %>% # Show top 8 terms per topic
+  top_n(8, beta) %>%
   ungroup() %>%
   arrange(topic, -beta)
+
+print(as.data.frame(terms(tweet_lda, 20)))
 
 # Visualize top terms per topic
 top_terms %>%
@@ -840,7 +782,7 @@ for (uni in universities) {
 }
 ```
 #### Conclusion:
-The LDA analysis reveals distinct topics across all tweets, emphasizing academic activities, events, and institutional developments. Each university exhibits unique themes, reflecting their individual focus areas and regional characteristics. This detailed topic modeling helps understand the primary subjects of interest and communication patterns across different Swiss universities of applied sciences.
+The LDA analysis reveals distinct topics across all tweets, emphasizing academic activities, events, and institutional developments. Overall the topics over all universities seem to be quite similar. Which indicates that the tweets are similar in content and style. However, the LDA model shows that topics like academic and research activities, student activities, and new developments are relevant in the tweets. Also because we stemmed the words could be not that understandable for the algorithm, this may have an effect on the choosen topics.
 
 ### Style Analysis
 The distribution of tweet lengths shows variation across universities. Most tweets are concise, aligning with Twitter's character limit, but the exact length distribution differs among institutions. It is interesting to see that much tweets have around 150 words and that the tweets from the universities are not that long. It is a typical sign that the tweets are not that long and this is a common thing in social media.
@@ -851,23 +793,15 @@ tweets %>%
   geom_histogram() +
   labs(title = "Distribution of Tweet Lengths")
 ```
+
 ### Sentiment Analysis
-Sentiment analysis was conducted to evaluate the emotional tone of the tweets. The analysis used the Syuzhet method to calculate sentiment scores for each tweet.
+Sentiment analysis was conducted to evaluate the emotional tone of the tweets. The analysis used the Syuzhet method to calculate sentiment scores for each tweet. Syuzhet was chosen because of its ability to capture the emotions within text. Which makes it effective for analyzing narrative structures. Additionally, the NRC sentiment dictionary was utilized for its comprehensive coverage of emotions across multiple languages, including German, Italian, and French. See Documentation: https://cran.r-project.org/web/packages/syuzhet/vignettes/syuzhet-vignette.html#:~:text=Multilingual%20Sentiment%20Lexicons. Together, Syuzhet and NRC provide a powerful combination for performing detailed and multilingual sentiment analysis.
 
 Overall Sentiment Trends:
 - The sentiment scores vary over time and by university, showing fluctuations in the emotional tone of the tweets.
 - Positive words commonly found in tweets include terms related to academic achievements, collaborations, and positive experiences.
 - Negative words often relate to challenges, competitions, and issues faced by the universities.
 
-Sentiment by University:
-- FHNW: Positive words include "academy", "accelerate", and "activities". Negative words include "avoid", "bacteria", and "challenge".
-- FH Graubünden: Positive words include "able", "academic", and "advantage". Negative words include "competition", "corruption", and "fire".
-- ZHAW: Positive words include "abilities", "academic", and "achievement". Negative words include "barrier", "challenge", and "competition".
-- BFH: Positive words include "academic", "access", and "activities". Negative words include "aggression", "competition", and "fail".
-- HES-SO: Positive words include "academic", "active", and "amazing". Negative words include "confessions", "failure", and "hard".
-- HSLU: Positive words include "academic", "access", and "achievement". Negative words include "addiction", "challenge", and "fail".
-- OST-FH: Positive words include "announce", "beautiful", and "collaboration". Negative words are minimal, including "dire" and "fire".
-- SUPSI-CH: Positive words include "academic", "access", and "achievement". Negative words include "barrier", "cloud", and "danger".
 ```{r}
 # Calculate Sentiment for Supported Languages Only
 langs <- c("de", "fr", "it", "en")
@@ -993,21 +927,11 @@ for (uni in unique(tweets_filtered$university)) {
   )
 }
 ```
+
 ### Conclusion:
-The analysis indicates that Swiss Universities of Applied Sciences exhibit diverse tweeting patterns in terms of content, style, and emotions. Tweets often focus on academic achievements, projects, and institutional news, with varying emotional tones across different universities. Recognizing these patterns can help universities optimize their social media strategies to better engage with their audiences.
+The analysis indicates that Swiss Universities of Applied Sciences exhibit diverse tweeting patterns in terms of content, style, and emotions. Tweets often focus on academic achievements, projects, and institutional news, with varying emotional tones across different universities.
 
 ## Question 4: What specific advice can you give us as communication department of BFH based on your analysis? How can we integrate the analysis of tweets in our internal processes, can you think of any data products that would be of value for us?
-
-The comprehensive analysis of BFH's tweets reveals several insights that can be leveraged to enhance the communication strategy.
-
-### Language Analysis:
-BFH predominantly tweets in German, with 3008 tweets in this language. This aligns with the linguistic preferences of their primary audience.
-
-### Emoji Analysis:
-The analysis of emoji usage shows that certain emojis are frequently used, which can be leveraged to increase engagement. Popular emojis like 🎓 (graduation cap) and 🚀 (rocket) often signify academic achievements and dynamic growth, resonating well with the audience.
-
-
-### Summary key insights from the analysis
 ```{r}
 # Language Analysis
 tweets %>%
@@ -1015,10 +939,23 @@ tweets %>%
   count(lang) %>%
   arrange(desc(n))
 
+# Pie chart of langugaes
+tweets %>%
+  filter(university == "bfh") %>%
+  count(lang) %>%
+  ggplot(aes(x = "", y = n, fill = lang)) +
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar("y") +
+  labs(title = "Language Distribution of Tweets by BFH")
+
 # Emoji Analysis
 emoji_count <- tweets %>%
   filter(university == "bfh") %>%
   top_n_emojis(full_text)
+
+print(emoji_count)
+# Sum of all emojis used
+print(sum(emoji_count$n))
 
 emoji_count %>%
   mutate(emoji_name = reorder(emoji_name, n)) %>%
@@ -1037,16 +974,17 @@ heatmap_data_bfh <- tweets %>%
   complete(day, timeofday_hour, fill = list(n = 0))
 
 # Show the pattern of the post time by day and hour. You can see clearly the working hours which are the time where the most tweets are posted.
-ggplot(heatmap_data_bfh, aes(x = timeofday_hour, y = day, fill = n)) +
+ggplot(heatmap_data_bfh, aes(x = day, y = timeofday_hour, fill = n)) +
   geom_tile(color = "white") +
   scale_fill_gradient(low = "lightblue", high = "darkblue") +
-  labs(title = "Heatmap of Tweet Activity", x = "Hour", y = "Day") +
+  labs(title = "Heatmap of Tweet Activity", x = "Day", y = "Hour") +
   theme_minimal()
 
 engagement_hour_bfh <- tweets %>%
   filter(university == "bfh") %>%
   group_by(timeofday_hour) %>%
   summarise(avg_engagement = mean(weighted_engagement, na.rm = TRUE))
+
 # When we look at the engagement by hour, we can see that the most engagement is around 4pm until 8pm. There is also a slight peak in the midday
 ggplot(engagement_hour, aes(x = timeofday_hour, y = avg_engagement)) +
   geom_bar(stat = "identity", fill = "#37556E") +
@@ -1075,61 +1013,52 @@ insights <- list(
   "Sentiment Analysis" = head(tweets_filtered$sentiment)
 )
 ```
+### Key Insights
 Based on the analysis, the following recommendations and key insights can be made to enhance BFH's communication strategy:
-### Key Insights:
 
 #### 1. Language and Emoji Usage:
 - **Language**: BFH predominantly tweets in German, with 3008 tweets in this language.
-- **Emojis**: Commonly used emojis include 🎓 (graduation cap), 🚀 (rocket), and 👉 (backhand index pointing right). These emojis often signify academic achievements and growth.
+- **Emojis**: There are emojis like "👉" (backhand index pointing right), "🔋" (battery), and "👇" (backhand index pointing down) that are frequently used. However, the overall emoji usage is relatively low.
 
 #### 2. Optimal Posting Times and Days:
 - **Most Active Hours**: The analysis revealed that 8 AM is the most active hour for BFH tweets. However, tweets posted around 4 PM and 8 PM tend to receive higher engagement.
-- **Most Active Days**: Tuesday is the most active day for BFH tweets. This suggests that significant announcements and updates should be scheduled on Tuesdays for maximum visibility and interaction.
+- **Most Active Days**: Tuesday is the most active day for BFH tweets. This resonates already well with the most liked tweets. But the peak on Tuesday is not very significant.
 
 #### 3. Content and Sentiment Analysis:
-- **Content Themes**: Frequent words in BFH tweets include "Bern", "Projekt" (project), and "Hochschul" (university). This indicates a focus on academic projects and institutional updates.
-- **Sentiment**: Positive words often relate to academic achievements and successful projects, while negative words relate to challenges and competitions.
+- **Content Themes**: Frequent words in BFH tweets include "Bern", "Projekt" (project), and "Hochschule" (university). This indicates a focus on academic projects and institutional updates.
+- **Sentiment**: Positive words often relate to academic achievements and successful projects, while negative words relate to challenges and competitions. A challenge is often subtitued with problem or issue. We suggest to use more positive words in the tweets to get a better sentiment score.
 
 #### 4. Engagement Patterns:
-- **Peak Engagement**: The highest average engagement occurs around 8 PM, with notable peaks at 4 PM and 7 PM.
+- **Peak Engagement**: The highest average engagement occurs around 8 PM, with notable peaks at 4 PM and 6 PM.
 - **Consistent Engagement**: Engagement remains relatively consistent from 6 AM to 5 PM, with moderate fluctuations.
 
 ### Recommendations:
 
-#### 1. Optimize Tweet Release Times:
-Schedule tweets during the most active hours (8 AM, 4 PM, and 8 PM) to maximize engagement. Consider aligning important announcements and updates with these times for better visibility.
-
-#### 2. Focus on Specific Days:
-Leverage Tuesdays for critical updates and major announcements to take advantage of the higher activity levels. Additionally, posting on Fridays and Sundays can also result in higher engagement.
-
-#### 3. Content Strategy:
-- **Emphasize Positive Themes**: Highlight student achievements, successful projects, and positive institutional news to generate positive reactions.
-- **Leverage Emoji Usage**: Use popular emojis like 🎓 and 🚀 to enhance tweet visibility and engagement.
+- **Twet Schedule**: Schedule tweets during the most active hours (4 PM, 6 PM, and 8 PM) to maximize engagement. Consider aligning important announcements and updates with these times and specific days for better visibility. Implement a regular schedule, for example, posting about new projects or student achievements each Tuesday at 4 PM.
+- **Multilangual Tweets**: The BFH may enhance its multilingual communication strategy by incorporating tweets in English and French to reach a broader audience.
+- **Emphasize Positive Themes**: Highlight student achievements, successful projects, and positive institutional news to generate positive reactions. Posts like "Congratulations to our students for their successful bachelor thesis" will likely receive positive reactions.
 - **Utilize Topic Insights**: Emphasize key themes such as academic projects, student updates, and digital initiatives to align content with audience interests.
+- **Emojis**: Conduct further research on the impact of emojis on tweet popularity, as current analysis does not show a strong correlation.
+- **Interactive Content**: Use polls, Q&A sessions, and live tweets during events to increase engagement.
+- **User-Generated Content**: Encourage students and faculty to share their experiences and tag the university in their posts. Retweeting and highlighting these posts can create a sense of community and increase engagement.
+- **Demographic Insights**: Analyze the demographics of the followers engaging with BFH tweets. Tailor content to resonate with different audience segments. This is not covered in this document.
 
 ### Integrating Tweet Analysis into Internal Processes:
 
-#### 1. Real-Time Analytics Dashboard:
-Implement a dashboard to track tweet performance, including engagement metrics, sentiment scores, and trending topics. This allows for real-time adjustments to the communication strategy.
+#### 1. Real-Time Tweet Dashboard:
+Implement a dashboard to track tweet performance, including engagement metrics, sentiment scores, and trending topics. This allows adjusting the tweet schedule and audience targeting in real-time. Monthly reports could also be sufficient for strategic adjustments.
 
-#### 2. Scheduled Reports:
-Generate weekly or monthly reports summarizing key metrics and insights. This helps the team stay informed about content performance and areas for improvement.
+#### 2. Content Calendar:
+Develop a content calendar that aligns tweet releases with peak engagement times and days. This helps plan tweets in advance and ensures they are posted at optimal times.
 
-#### 3. Content Calendar:
-Develop a content calendar that aligns tweet releases with peak engagement times and days. Incorporate findings from sentiment and topic analyses to plan relevant and engaging content.
-
-#### 4. Feedback Loop:
-Establish a feedback loop where the communication team reviews analytics data and adjusts the strategy accordingly. Regular team meetings to discuss insights can foster a data-driven approach to communication.
+#### 3. Feedback Loop:
+Establish a feedback loop where the communication team reviews analytics data and adjusts strategies according to the findings. Regular team meetings can help discuss insights and support a data-driven approach to communication.
 
 ### Potential Data Products:
 
-#### 1. Engagement Prediction Tool:
-Develop a tool that predicts the best times to tweet based on historical data, optimizing tweet scheduling for maximum engagement.
-
-#### 2. Sentiment Analysis Bot:
-Implement an automated system to analyze the sentiment of drafts before posting, ensuring an appropriate and positive tone.
-
-#### 3. Trend Tracker:
-Create a feature that identifies emerging topics and trends in real-time, allowing the communication team to quickly adapt and incorporate relevant themes into their messaging.
+1. **Engagement Prediction Tool**: Develop a tool that predicts the best times to tweet based on historical data. This optimizes tweet scheduling for maximum engagement and can also predict periodic peaks in engagement.
+2. **Sentiment Analysis Bot**: Develop a tool to analyze the sentiment of drafts before posting, ensuring an appropriate and positive tone. This should aldough not be used as a content controll (We're not in China)
+3. **Trend Tracker**: Create a feature that identifies emerging topics and trends in real-time. This allows the communication team to quickly adapt and incorporate relevant themes into their messaging.
+4. **Influencer Tool**: Identify key influencers who engage with BFH's tweets. This can include industry leaders, alumni, or current students with significant followings.
 
 By integrating these recommendations and tools, BFH can enhance its communication strategy, ensuring that its messages are timely, relevant, and engaging for its audience.
